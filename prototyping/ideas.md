@@ -1,8 +1,0 @@
-- De la nourriture spwan à des coordonnées aléatoires de la surface.
-- Du danger spawn à des coordonénes aléatoire de la surface.
-- Les vivants se déplacent aléatoirement sur la surface à la recherche de nourriture.
-- Les vivants disposent d'un rayon sensoriel plus ou moins large leur permettant de détecter la nourriture ou le danger.
-- Lorsque de la nourriture apparaît dans le champ sensoriel d'un vivant, il se dirige droit vers elle pour la consommer.
-- Lorsqu'un danger apparaît dans le champ sensoriel d'un vivant, il fuit.
-- Le déplacement du vivant consomme son énergie.
-- La consommation de la nourriture augmente l'énergie du vivant.
