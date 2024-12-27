@@ -1,6 +1,5 @@
 import pygame
 import random
-
 import numpy as np
 
 # Initialisation de Pygame
@@ -12,9 +11,9 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Simulation de Vivants")
 
 # Couleurs
-BLANC = (255, 255, 255)
-NOIR = (0, 0, 0)
-ROUGE = (255, 0, 0)
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+RED = (255, 0, 0)
 
 def midpoint(point1: tuple, 
              point2: tuple,
@@ -48,172 +47,182 @@ def get_distance(p1: tuple, p2: tuple) -> float:
   distance = np.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
   return distance
 
-def triangle(center_pos: tuple, base_length: int, height: int):
-    center_base = (center_pos[0], center_pos[1] + height // 2)
-    p1 = (center_base[0] - base_length // 2, center_base[1])
-    p2 = (p1[0] + base_length, p1[1])
-    p3 = (center_pos[0], center_pos[1] - height // 2)
-
-    pygame.draw.polygon(screen, (255, 0, 0), [p1, p2, p3])
+def angle(survivor_pos: tuple, danger_pos: tuple):
+    return np.arctan2(danger_pos[1] - survivor_pos[1], danger_pos[0], survivor_pos[0])
 
 class Survivor:
-    def __init__(self, x, y, radius, speed):
+    def __init__(self, x, y):
         self.x = x
         self.y = y
         self.dx = 0.0
         self.dy = 0.0
-        self.radius = radius
-        self.sensorial_radius = self.radius * 10
-        self.color = [0, 0, 0]
+        self.speed = 4
+
+        self.survivor_radius = 5
+        self.sensorial_radius = self.survivor_radius * 10
+
+        self.color = [0, 200, 0]
         self.color_danger = [200, 0, 0]
-        self.speed = speed
-        self.direction_time = random.randint(30,90)
+
+        self.flee_speed = self.speed + 2
+        self.flee_counter = 0
+        self.flee_duration = 60
+
+        self.direction_time = random.randint(30,50)
         self.direction_counter = 0
+
         self.in_danger = False
+        self.energy = 50
 
     def change_direction(self):
+        """Choosing a random direction by randomly changing 
+        the values of dx and dy.
+
+        In the 'move' method, the Survivor's x and y 
+        values are added to dx and dy respectively, 
+        which can be between -1 and 1, to establish the 
+        direction of the next step. The variation in x 
+        and y can therefore be positive or negative.
+        """        
         self.dx = random.uniform(-1, 1)  # Direction aléatoire en x
         self.dy = random.uniform(-1, 1)  # Direction aléatoire en y
 
     def move(self):
-        self.x += self.dx * self.speed
-        self.y += self.dy * self.speed
+        """Moves the Survivor in two different modes:
+            - Search mode: the Survivor moves randomly 
+            across the surface in search of food.
+            - Escape mode: the Survivor perceives danger 
+            in its sensory field, and flees by increasing 
+            its speed.
+        """
+        if not self.in_danger:
+            self.x += self.dx * self.speed
+            self.y += self.dy * self.speed
 
-        # Infinite space
-        if self.x + self.radius < 0:
-            self.x = WIDTH + self.radius
-        elif self.x - self.radius > WIDTH:
-            self.x = -self.radius
+        else:
+            self.x += self.dx * self.flee_speed
+            self.y += self.dy * self.flee_speed
+
+            self.flee_counter += 1
+            if self.flee_counter >= self.flee_duration:
+                self.in_danger = False
+                self.flee_counter = 0
+
+        # If the Survivor goes out on one side of the 
+        # surface, it comes back in on the other.
+        #
+        # Exits from left or right side
+        if self.x + self.survivor_radius < 0:
+            self.x = WIDTH + self.survivor_radius
+        elif self.x - self.survivor_radius > WIDTH:
+            self.x = -self.survivor_radius
         
-        if self.y + self.radius < 0:
-            self.y = HEIGHT + self.radius
-        elif self.y - self.radius > HEIGHT:
-            self.y = -self.radius
+        # Exits from top or bottom side
+        if self.y + self.survivor_radius < 0:
+            self.y = HEIGHT + self.survivor_radius
+        elif self.y - self.survivor_radius > HEIGHT:
+            self.y = -self.survivor_radius
         
+        # 
         self.direction_counter +=1
         if self.direction_counter >= self.direction_time:
             self.change_direction()
-            self.direction_time = random.randint(30, 90)
+            self.direction_time = random.randint(30, 60)
             self.direction_counter = 0
 
     def show(self):
         if not self.in_danger:
-            pygame.draw.circle(screen, tuple(self.color), (int(self.x), int(self.y)), self.radius)
+            pygame.draw.circle(screen, tuple(self.color), (int(self.x), int(self.y)), self.survivor_radius)
             pygame.draw.circle(screen, (0, 0, 0), (int(self.x), int(self.y)), self.sensorial_radius, 1)
         else:
-            pygame.draw.circle(screen, tuple(self.color_danger), (int(self.x), int(self.y)), self.radius)
+            pygame.draw.circle(screen, tuple(self.color_danger), (int(self.x), int(self.y)), self.survivor_radius)
             pygame.draw.circle(screen, (255, 0, 0), (int(self.x), int(self.y)), self.sensorial_radius, 3)
-
 
     def get_pos(self):
         return self.x, self.y
-    
-class Food:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.edge = 10
-        self.color = [0, 0, 255]
-    
-    def show(self):
-        food_rect = pygame.Rect(self.x, self.y, self.edge, self.edge)
-        pygame.draw.rect(screen, tuple(self.color), food_rect)
-
-    def get_pos(self):
-        return self.x + self.edge // 2, self.y + self.edge // 2
 
 class Danger:
     def __init__(self, x, y):
         self.x = x
         self.y = y
         self.edge = 20
-        #self.base_length = 20
-        #self.height = 20
         self.color = [255, 0, 0]
     
     def show(self):
-        #triangle(center_pos=(x, y), base_length= self.base_length, height= self.height)
         danger_rect = pygame.Rect(self.x, self.y, self.edge, self.edge)
         pygame.draw.rect(screen, tuple(self.color), danger_rect)
 
     def get_pos(self):
         return self.x + self.edge // 2, self.y + self.edge // 2
 
-# Création des vivants
-survivors = []
-#vivants = list([Vivant])
-
-for _ in range(5):  # Création de 20 vivants
-    x = random.randint(50, WIDTH - 50)
-    y = random.randint(50, HEIGHT - 50)
-    rayon = random.randint(5, 15)
-    vitesse = random.uniform(3, 5)
-    survivor = Survivor(x, y, rayon, vitesse)
-    survivors.append(survivor)
-
-""" foods = []
-for _ in range(1):
-    x = random.randint(50, WIDTH - 50)
-    y = random.randint(50, HEIGHT - 50)
-    food = Food(x, y)
-    foods.append(food) """
-
-x = random.randint(50, WIDTH - 50)
-y = random.randint(50, HEIGHT - 50)
-food = Food(x, y)
-
-""" dangers = []
-for _ in range(1):
-    danger = Danger(100, 100)
-    dangers.append(danger) """
-
 danger = Danger(WIDTH//2, HEIGHT//2)
+
+survivors = []
+
+for _ in range(10):  # Création de vivants
+    radius = 5
+
+    far_enough_from_danger = False
+    while not far_enough_from_danger:
+        x = random.randint(10, WIDTH - 10)
+        y = random.randint(10, HEIGHT - 10)
+        if get_distance((x, y), danger.get_pos()) <= radius + danger.edge:
+            print("TOO CLOSE AVOIDED")
+            continue
+        else:
+            far_enough_from_danger = True
+
+    survivor = Survivor(x, y)
+    survivors.append(survivor)
 
 # Boucle principale
 running = True
 clock = pygame.time.Clock() #Pour gérer les FPS
 FPS = 30
-frames = 1
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
 
-    # Effacement de l'écran
-    screen.fill(BLANC)
+    # Surface erasing
+    screen.fill(WHITE)
 
-
-    # Mise à jour et affichage des vivants
+    # Updating and displaying Survivors
     for survivor in survivors:
-        frames += 1
+        # Recovering the distance between Survivor and 
+        # Danger
+        danger_distance = get_distance(survivor.get_pos(), danger.get_pos())
+        
+        # Danger is in the area of Survivor's sensory field.
+        # Survivor enters 'in_danger' mode and an escape 
+        # vector is generated.
+        if danger_distance < survivor.sensorial_radius:
+            survivor.in_danger = True
+
+            # The difference between the Survivor and 
+            # Danger coordinates is calculated. This 
+            # gives the horizontal and vertical components
+            # of the vector from Danger to Survivor.
+            dx = survivor.x - danger.x
+            dy = survivor.y - danger.y
+
+            # Vector normalization by Pythagorean theorem.
+            norm = np.sqrt(dx**2 + dy**2)
+            if norm != 0:
+                survivor.dx = dx / norm
+                survivor.dy = dy / norm
+        
+        elif not survivor.in_danger:
+            survivor.flee_counter = 0
+
         survivor.move()
         survivor.show()
 
-        pygame.draw.line(screen, (255,0,0), survivor.get_pos(), danger.get_pos())
-        #pygame.draw.line(screen, (0,0,255), vivant.get_pos(), food.get_pos())
-
-        """ if frames % 50 == 0:
-            print(get_distance(vivant.get_pos(), danger.get_pos()))
-            print("VIVANT POS : ", vivant.get_pos())
-            print("DANGER POS : ", danger.get_pos())
-            print("SENSORIAL RADIUS : ", vivant.sensorial_radius)
-            frames = 1 """
-
-        if get_distance(survivor.get_pos(), danger.get_pos()) < survivor.sensorial_radius:
-            survivor.in_danger = True
-            #print("DANGER")
-        else:
-            survivor.in_danger = False
-
-    """ for food in foods:
-        food.show() """
-
-    food.show()
+        #pygame.draw.line(screen, (255,0,0), survivor.get_pos(), danger.get_pos())
     
     danger.show()
 
-    # Mise à jour de l'affichage
-    pygame.display.flip()
-    clock.tick(FPS) #Limite les FPS
+    pygame.display.flip() # Updating display
+    clock.tick(FPS) # FPS Limit 
 
 pygame.quit()
