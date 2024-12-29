@@ -6,7 +6,7 @@ import numpy as np
 pygame.init()
 
 # Dimensions de l'écran
-WIDTH, HEIGHT = 800, 600
+WIDTH, HEIGHT = 1024, 800
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Simulation de Vivants")
 
@@ -14,6 +14,8 @@ pygame.display.set_caption("Simulation de Vivants")
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
+
+NB_OF_SURVIVORS = 20
 
 def midpoint(point1: tuple, 
              point2: tuple,
@@ -44,7 +46,8 @@ def get_distance(p1: tuple, p2: tuple) -> float:
   Returns:
   The distance between the two coordinates 
   """
-  distance = np.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
+  #distance = np.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
+  distance = np.linalg.norm(np.array(p2) - np.array(p1))
   return distance
 
 def angle(survivor_pos: tuple, danger_pos: tuple):
@@ -58,8 +61,8 @@ class Survivor:
         self.dy = 0.0
         self.speed = 4
 
-        self.survivor_radius = 5
-        self.sensorial_radius = self.survivor_radius * 10
+        self.survivor_radius = 10
+        self.sensorial_radius = self.survivor_radius * 5
 
         self.color = [0, 200, 0]
         self.color_danger = [200, 0, 0]
@@ -72,6 +75,7 @@ class Survivor:
         self.direction_counter = 0
 
         self.in_danger = False
+        self.in_follow = False
         self.energy = 50
 
     def change_direction(self):
@@ -84,9 +88,10 @@ class Survivor:
         direction of the next step. The variation in x 
         and y can therefore be positive or negative.
         """        
-        self.dx = random.uniform(-1, 1)  # Direction aléatoire en x
-        self.dy = random.uniform(-1, 1)  # Direction aléatoire en y
-
+        angle = np.random.uniform(0, 2 * np.pi)
+        self.dx = np.cos(angle)
+        self.dy = np.sin(angle)
+    
     def move(self):
         """Moves the Survivor in two different modes:
             - Search mode: the Survivor moves randomly 
@@ -95,10 +100,12 @@ class Survivor:
             in its sensory field, and flees by increasing 
             its speed.
         """
+        # Search mode : not in danger
         if not self.in_danger:
             self.x += self.dx * self.speed
             self.y += self.dy * self.speed
 
+        # Escape mode : in danger
         else:
             self.x += self.dx * self.flee_speed
             self.y += self.dy * self.flee_speed
@@ -131,12 +138,20 @@ class Survivor:
             self.direction_counter = 0
 
     def show(self):
-        if not self.in_danger:
-            pygame.draw.circle(screen, tuple(self.color), (int(self.x), int(self.y)), self.survivor_radius)
-            pygame.draw.circle(screen, (0, 0, 0), (int(self.x), int(self.y)), self.sensorial_radius, 1)
-        else:
+        # Survivor is in danger
+        if self.in_danger and not self.in_follow:
             pygame.draw.circle(screen, tuple(self.color_danger), (int(self.x), int(self.y)), self.survivor_radius)
             pygame.draw.circle(screen, (255, 0, 0), (int(self.x), int(self.y)), self.sensorial_radius, 3)
+
+        # Survivor follows an other Survivor in danger
+        elif self.in_follow: #and not self.in_danger:
+            pygame.draw.circle(screen, tuple(self.color_danger), (int(self.x), int(self.y)), self.survivor_radius)
+            pygame.draw.circle(screen, (255, 165, 0), (int(self.x), int(self.y)), self.sensorial_radius, 3)
+
+        # Survivor is ok
+        else:
+            pygame.draw.circle(screen, tuple(self.color), (int(self.x), int(self.y)), self.survivor_radius)
+            pygame.draw.circle(screen, (0, 0, 0), (int(self.x), int(self.y)), self.sensorial_radius, 1)
 
     def get_pos(self):
         return self.x, self.y
@@ -159,7 +174,7 @@ danger = Danger(WIDTH//2, HEIGHT//2)
 
 survivors = []
 
-for _ in range(10):  # Création de vivants
+for _ in range(NB_OF_SURVIVORS):  # Création de vivants
     radius = 5
 
     far_enough_from_danger = False
@@ -189,6 +204,7 @@ while running:
 
     # Updating and displaying Survivors
     for survivor in survivors:
+        # - - - - Direct contact with danger - - - -
         # Recovering the distance between Survivor and 
         # Danger
         danger_distance = get_distance(survivor.get_pos(), danger.get_pos())
@@ -215,6 +231,25 @@ while running:
         elif not survivor.in_danger:
             survivor.flee_counter = 0
 
+    # - - - - Interaction with other survivors - - - -
+    for survivor in survivors:
+        # If a Survivor encounters another Survivor in 
+        # danger within its sensory field, it follows it 
+        # as it flees.
+        survivor.in_follow = False
+        if not survivor.in_danger:
+            for other_survivor in survivors:
+                if other_survivor != survivor and other_survivor.in_danger:
+                    if get_distance(survivor.get_pos(), other_survivor.get_pos()) < survivor.sensorial_radius + other_survivor.sensorial_radius:
+                        survivor.in_follow = True
+                        survivor.dx = other_survivor.dx
+                        survivor.dy = other_survivor.dy
+                        break  # Sortir de la boucle si on trouve un autre survivor en danger
+                    else:
+                        survivor.in_follow = False
+
+    # Move and show survivors
+    for survivor in survivors:
         survivor.move()
         survivor.show()
 
