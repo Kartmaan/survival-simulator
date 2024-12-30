@@ -5,17 +5,19 @@ import numpy as np
 # Initialisation de Pygame
 pygame.init()
 
-# Dimensions de l'écran
+# Screen options
 WIDTH, HEIGHT = 1024, 800
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Simulation de Vivants")
+pygame.display.set_caption("Survivors sim")
+
+FPS = 30
 
 # Couleurs
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 
-NB_OF_SURVIVORS = 20
+NB_OF_SURVIVORS = 25
 
 def midpoint(point1: tuple, 
              point2: tuple,
@@ -60,6 +62,7 @@ class Survivor:
         self.dx = 0.0
         self.dy = 0.0
         self.speed = 4
+        self.timers = {}
 
         self.survivor_radius = 10
         self.sensorial_radius = self.survivor_radius * 5
@@ -68,15 +71,36 @@ class Survivor:
         self.color_danger = [200, 0, 0]
 
         self.flee_speed = self.speed + 2
-        self.flee_counter = 0
-        self.flee_duration = 60
-
-        self.direction_time = random.randint(30,50)
-        self.direction_counter = 0
+        self.flee_duration = 3
 
         self.in_danger = False
         self.in_follow = False
-        self.energy = 50
+
+        self.init_energy_val = 50
+        self.energy = self.init_energy_val
+        self.energy_loss_per_sec = 0.5
+
+    def timer(self, timer_name: str, duration: float) -> bool:
+        """Checks if a timer has expired.
+
+        Args:
+            timer_name (str): Timer name.
+            duration (float): Desired duration in seconds.
+
+        Returns:
+            bool: True if time is up, False otherwise.
+        """        
+        current_time = pygame.time.get_ticks() / 1000.0
+        if timer_name not in self.timers:
+            self.timers[timer_name] = current_time
+            return False
+    
+        elapsed_time = current_time - self.timers[timer_name]
+        if elapsed_time >= duration:
+            self.timers[timer_name] = current_time
+            return True
+
+        return False
 
     def change_direction(self):
         """Choosing a random direction by randomly changing 
@@ -105,15 +129,16 @@ class Survivor:
             self.x += self.dx * self.speed
             self.y += self.dy * self.speed
 
+            if self.timer("direction", random.randint(1,3)):
+                self.change_direction()
+
         # Escape mode : in danger
         else:
             self.x += self.dx * self.flee_speed
             self.y += self.dy * self.flee_speed
 
-            self.flee_counter += 1
-            if self.flee_counter >= self.flee_duration:
+            if self.timer("flee", self.flee_duration):
                 self.in_danger = False
-                self.flee_counter = 0
 
         # If the Survivor goes out on one side of the 
         # surface, it comes back in on the other.
@@ -129,13 +154,6 @@ class Survivor:
             self.y = HEIGHT + self.survivor_radius
         elif self.y - self.survivor_radius > HEIGHT:
             self.y = -self.survivor_radius
-        
-        # 
-        self.direction_counter +=1
-        if self.direction_counter >= self.direction_time:
-            self.change_direction()
-            self.direction_time = random.randint(30, 60)
-            self.direction_counter = 0
 
     def show(self):
         # Survivor is in danger
@@ -162,6 +180,7 @@ class Danger:
         self.y = y
         self.edge = 20
         self.color = [255, 0, 0]
+        self.damage = 2
     
     def show(self):
         danger_rect = pygame.Rect(self.x, self.y, self.edge, self.edge)
@@ -170,7 +189,7 @@ class Danger:
     def get_pos(self):
         return self.x + self.edge // 2, self.y + self.edge // 2
 
-danger = Danger(WIDTH//2, HEIGHT//2)
+danger = Danger(random.randint(50, WIDTH-50), random.randint(50, HEIGHT-50))
 
 survivors = []
 
@@ -193,8 +212,8 @@ for _ in range(NB_OF_SURVIVORS):  # Création de vivants
 # Boucle principale
 running = True
 clock = pygame.time.Clock() #Pour gérer les FPS
-FPS = 30
 while running:
+    #print(clock.get_time(), end = "\r")
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -204,6 +223,7 @@ while running:
 
     # Updating and displaying Survivors
     for survivor in survivors:
+        #print(survivor.energy, end="\r")
         # - - - - Direct contact with danger - - - -
         # Recovering the distance between Survivor and 
         # Danger
@@ -227,9 +247,6 @@ while running:
             if norm != 0:
                 survivor.dx = dx / norm
                 survivor.dy = dy / norm
-        
-        elif not survivor.in_danger:
-            survivor.flee_counter = 0
 
     # - - - - Interaction with other survivors - - - -
     for survivor in survivors:
@@ -245,11 +262,10 @@ while running:
                         survivor.dx = other_survivor.dx
                         survivor.dy = other_survivor.dy
                         break  # Sortir de la boucle si on trouve un autre survivor en danger
-                    else:
-                        survivor.in_follow = False
 
     # Move and show survivors
     for survivor in survivors:
+        #print(survivor.timers, end="\r")
         survivor.move()
         survivor.show()
 
