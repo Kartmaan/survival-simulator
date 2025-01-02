@@ -17,7 +17,7 @@ WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 
-NB_OF_SURVIVORS = 25
+NB_OF_SURVIVORS = 1
 
 def midpoint(point1: tuple, 
              point2: tuple,
@@ -61,11 +61,18 @@ class Survivor:
         self.y = y
         self.dx = 0.0
         self.dy = 0.0
-        self.speed = 4
+
+        self.speed_default = 4
+        self.speed = self.speed_default
+        self.speed_critical = self.speed / 2
+
         self.timers = {}
 
-        self.survivor_radius = 10
-        self.sensorial_radius = self.survivor_radius * 5
+        self.survivor_radius_default = 10
+        self.survivor_radius = self.survivor_radius_default
+        
+        self.sensorial_radius_default = self.survivor_radius * 5
+        self.sensorial_radius = self.survivor_radius_default
 
         self.color = [0, 200, 0]
         self.color_danger = [200, 0, 0]
@@ -76,12 +83,20 @@ class Survivor:
         self.in_danger = False
         self.in_follow = False
 
-        self.init_energy_val = 50
-        self.energy = self.init_energy_val
-        self.energy_loss_per_sec = 0.5
+        self.energy_default = 50
+        self.energy = self.energy_default
+        self.in_critical = False
+        self.energy_critical = self.energy_default / 4
+        self.energy_loss_frequency = 1 # In second
+        self.energy_loss_normal = 0.5 # Per second
+        self.energy_loss_danger = 1.5 # Per second
 
     def timer(self, timer_name: str, duration: float) -> bool:
         """Checks if a timer has expired.
+
+        This allows each Survivor to have its own timers 
+        and therefore to have a personalized time management 
+        system for each of them. 
 
         Args:
             timer_name (str): Timer name.
@@ -89,12 +104,34 @@ class Survivor:
 
         Returns:
             bool: True if time is up, False otherwise.
-        """        
+        """
+        # Pygame's get_ticks() method is used to retrieve 
+        # the number of milliseconds that have elapsed 
+        # since Pygame was initialized. For each call, 
+        # this therefore corresponds to the current time.
+        # The value is divided by 1000 to obtain seconds.
         current_time = pygame.time.get_ticks() / 1000.0
+        
+        # If the timer name isn't present in the 
+        # 'self.timers' dictionary keys, it's added, with 
+        # the current time as value (it acts as a fixed 
+        # time reference point for calculating durations).
+        # The function returns False, as the timer has 
+        # just been added and therefore cannot have 
+        # already elapsed.
         if timer_name not in self.timers:
             self.timers[timer_name] = current_time
             return False
     
+        # We assume that the timer name is already present 
+        # in self.timers.
+        # The time stored in the dictionary is subtracted 
+        # from the current time to establish the elapsed 
+        # time.
+        # If the elapsed time is greater than the desired 
+        # duration, then the dictionary value is updated 
+        # and the function returns True.
+        # Otherwise the function returns False.
         elapsed_time = current_time - self.timers[timer_name]
         if elapsed_time >= duration:
             self.timers[timer_name] = current_time
@@ -124,12 +161,27 @@ class Survivor:
             in its sensory field, and flees by increasing 
             its speed.
         """
+        if self.energy <= self.energy_critical:
+            self.in_critical = True
+        else:
+            self.in_critical = False
+
+        if self.in_critical and self.sensorial_radius > self.survivor_radius:
+            if self.timer("sensorial_radius", 0.5):
+                new_radius = (self.energy / self.energy_critical) * self.sensorial_radius_default
+                self.sensorial_radius = new_radius
+        else:
+            self.sensorial_radius = self.sensorial_radius_default
+        
         # Search mode : not in danger
         if not self.in_danger:
             self.x += self.dx * self.speed
             self.y += self.dy * self.speed
 
-            if self.timer("direction", random.randint(1,3)):
+            if self.timer("energy_loss", self.energy_loss_frequency):
+                self.energy -= self.energy_loss_normal
+
+            if self.timer("direction", random.uniform(2,7)):
                 self.change_direction()
 
         # Escape mode : in danger
@@ -137,12 +189,14 @@ class Survivor:
             self.x += self.dx * self.flee_speed
             self.y += self.dy * self.flee_speed
 
+            if self.timer("energy_loss", self.energy_loss_frequency):
+                self.energy -= self.energy_loss_danger
+
             if self.timer("flee", self.flee_duration):
                 self.in_danger = False
 
         # If the Survivor goes out on one side of the 
         # surface, it comes back in on the other.
-        #
         # Exits from left or right side
         if self.x + self.survivor_radius < 0:
             self.x = WIDTH + self.survivor_radius
@@ -155,6 +209,9 @@ class Survivor:
         elif self.y - self.survivor_radius > HEIGHT:
             self.y = -self.survivor_radius
 
+        if self.energy <= 0:
+            self.energy = 0
+
     def show(self):
         # Survivor is in danger
         if self.in_danger and not self.in_follow:
@@ -165,6 +222,10 @@ class Survivor:
         elif self.in_follow: #and not self.in_danger:
             pygame.draw.circle(screen, tuple(self.color_danger), (int(self.x), int(self.y)), self.survivor_radius)
             pygame.draw.circle(screen, (255, 165, 0), (int(self.x), int(self.y)), self.sensorial_radius, 3)
+
+        elif self.in_critical:
+            pygame.draw.circle(screen, (42, 42, 42), (int(self.x), int(self.y)), self.survivor_radius)
+            pygame.draw.circle(screen, (0, 0, 0), (int(self.x), int(self.y)), self.sensorial_radius, 1)
 
         # Survivor is ok
         else:
@@ -189,12 +250,32 @@ class Danger:
     def get_pos(self):
         return self.x + self.edge // 2, self.y + self.edge // 2
 
-danger = Danger(random.randint(50, WIDTH-50), random.randint(50, HEIGHT-50))
+class Food:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.color = [0, 255, 0]
+        self.edge = 20
+        self.field_radius = self.edge * 2
+        self.quantity = 20
+        self.energy_bonus = 1
+    
+    def show(self):
+        food_rect = pygame.Rect(self.x, self.y, self.edge, self.edge)
+        pygame.draw.rect(screen, tuple(self.color), food_rect)
+        pygame.draw.circle(screen, (0, 255, 0), (self.x + self.edge//2, self.y + self.edge//2), self.field_radius, 3)
+    
+    def get_pos(self):
+        return self.x, self.y
 
+danger = Danger(random.randint(50, WIDTH-50), random.randint(50, HEIGHT-50))
+food = Food(WIDTH//2, HEIGHT//2)
+
+survivor_zero = Survivor(0, 0) # Survivor model
 survivors = []
 
-for _ in range(NB_OF_SURVIVORS):  # Création de vivants
-    radius = 5
+for _ in range(NB_OF_SURVIVORS):
+    radius = survivor_zero.survivor_radius
 
     far_enough_from_danger = False
     while not far_enough_from_danger:
@@ -211,9 +292,8 @@ for _ in range(NB_OF_SURVIVORS):  # Création de vivants
 
 # Boucle principale
 running = True
-clock = pygame.time.Clock() #Pour gérer les FPS
+clock = pygame.time.Clock()
 while running:
-    #print(clock.get_time(), end = "\r")
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -232,7 +312,7 @@ while running:
         # Danger is in the area of Survivor's sensory field.
         # Survivor enters 'in_danger' mode and an escape 
         # vector is generated.
-        if danger_distance < survivor.sensorial_radius:
+        if danger_distance - 5 < survivor.sensorial_radius:
             survivor.in_danger = True
 
             # The difference between the Survivor and 
@@ -261,17 +341,19 @@ while running:
                         survivor.in_follow = True
                         survivor.dx = other_survivor.dx
                         survivor.dy = other_survivor.dy
-                        break  # Sortir de la boucle si on trouve un autre survivor en danger
+                        break  # Another Survivor in danger
 
     # Move and show survivors
     for survivor in survivors:
-        #print(survivor.timers, end="\r")
+        print(survivor.energy, end="\r")
+        
         survivor.move()
         survivor.show()
 
         #pygame.draw.line(screen, (255,0,0), survivor.get_pos(), danger.get_pos())
     
     danger.show()
+    food.show()
 
     pygame.display.flip() # Updating display
     clock.tick(FPS) # FPS Limit 
