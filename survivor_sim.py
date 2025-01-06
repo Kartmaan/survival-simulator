@@ -20,11 +20,11 @@ GREEN = [0, 200, 0]
 BLUE = [0, 0, 255]
 ORANGE = [255, 165, 0]
 
-NB_OF_SURVIVORS = 15
-SHOW_SENSORIAL_FIELD = True
+NB_OF_SURVIVORS = 150
+SHOW_SENSORIAL_FIELD = False
 
 def get_distance(p1: tuple, p2: tuple) -> float:
-  """Returns the Euclidean distance between two coordinates
+  """Returns the Euclidean distance between two coordinates.
 
   Args:
   p1 : First coordinates
@@ -36,6 +36,19 @@ def get_distance(p1: tuple, p2: tuple) -> float:
   #distance = np.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
   distance = np.linalg.norm(np.array(p2) - np.array(p1))
   return distance
+
+def current_time() -> float:
+    """Returns the number of seconds since Pygame was 
+    initialized.
+
+    Pygame's get_ticks method returns a value in 
+    milliseconds, which is divided by 1000 to obtain 
+    seconds.
+
+    Returns:
+        float: Number of seconds since initialization.
+    """    
+    return pygame.time.get_ticks() / 1000.0
 
 class Survivor:
     def __init__(self, x, y):
@@ -72,6 +85,7 @@ class Survivor:
         self.color_follow = ORANGE
         self.color_critical = BLACK
         self.color_immobilized = self.color_critical.copy()
+        self.final_fading_color = WHITE
         self.sensorial_field_color = GREEN
         self.sensorial_field_color_follow = ORANGE
         self.sensorial_field_color_danger = RED
@@ -112,7 +126,7 @@ class Survivor:
         # since Pygame was initialized. For each call, 
         # this therefore corresponds to the current time.
         # The value is divided by 1000 to obtain seconds.
-        current_time = pygame.time.get_ticks() / 1000.0
+        now = current_time()
         
         # If the timer name isn't present in the 
         # 'self.timers' dictionary keys, it's added, with 
@@ -122,7 +136,7 @@ class Survivor:
         # just been added and therefore cannot have 
         # already elapsed.
         if timer_name not in self.survivor_timers:
-            self.survivor_timers[timer_name] = current_time
+            self.survivor_timers[timer_name] = now
             return False
     
         # We assume that the timer name is already present 
@@ -134,9 +148,9 @@ class Survivor:
         # duration, then the dictionary value is updated 
         # and the function returns True.
         # Otherwise the function returns False.
-        elapsed_time = current_time - self.survivor_timers[timer_name]
+        elapsed_time = now - self.survivor_timers[timer_name]
         if elapsed_time >= duration:
-            self.survivor_timers[timer_name] = current_time
+            self.survivor_timers[timer_name] = now
             return True
 
         return False
@@ -155,54 +169,101 @@ class Survivor:
         self.dx = np.cos(angle)
         self.dy = np.sin(angle)
     
-    def move(self):
-        """Moves the Survivor in two different modes:
+    def move(self) -> bool:
+        """Moves the Survivor in different modes:
             - Search mode: the Survivor moves randomly 
             across the surface in search of food.
             - Escape mode: the Survivor perceives danger 
             in its sensory field, and flees by increasing 
             its speed.
-        """
+            - Critical mode: The Survivor has reached a 
+            critical energy threshold, and its movement 
+            speed decreases.
+            - Immobilized mode: Survivor has no energy 
+            left and can't move anymore.
 
+            Returns:
+                bool: Returns True if the Survivor is to 
+                be deleted, False otherwise.
+        """
+        # - - - - - - - - - -  IMMOBILIZATION - - - - - - - - - -
+
+        # The Survivor has run out of energy but has not 
+        # yet been immobilized.
         if self.energy <= 0 and not self.immobilized:
             self.immobilized = True
             self.survivor_timers["immobilization"] = pygame.time.get_ticks() / 1000.0
         
+        # The Survivor is immobilized.
         if self.immobilized:
             if self.timer("immobilization", self.immobilization_time):
                 self.fading = True
-                self.survivor_timers["fade"] = pygame.time.get_ticks() / 1000.0
-            
+                # The next step after immobilization is the 
+                # degradation of the Survivor's color, a step
+                # that lasts 'self.fade_duration' seconds. 
+                # We therefore initialize a 'fade' timer now.  
+                self.survivor_timers["fade"] = current_time()
+        
+        # Start of fading phase.
+        # The Survivor is immobilized and its color begins 
+        # to fade, the last step before it is removed.
         if self.fading:
-            elapsed_fade_time = (pygame.time.get_ticks() / 1000.0) - self.survivor_timers["fade"]
+            # Calculating the time elapsed since fading began.
+            elapsed_fade_time = current_time() - self.survivor_timers["fade"]
+            
+            # The ratio of elapsed fade time to total fade time is 
+            # used to determine whether the fade phase is complete, 
+            # and also to adjust RGB values according to fade progress. 
             fade_progress = elapsed_fade_time / self.fade_duration
             #print(f"elapsed_fade_time: {elapsed_fade_time}, fade_progress: {fade_progress}")
 
+            # When the ratio is 1, this means that the time allocated 
+            # to fading has elapsed, but depending on the FPS value, 
+            # it's possible that the step between each loop passage 
+            # is too large, so that “fade_progress” never reaches 1. 
+            # To compensate for this, we add a tolerance value.
+            # If the condition is True, the function stops by 
+            # returning True, which will send a signal (in the main 
+            # loop) to delete the Survivor.
             TOLERANCE = 1e-2
             if fade_progress >= 1 - TOLERANCE:
                 #print("FADING OVER")
                 self.immobilized = False
                 self.fading = False
-                #survivors.remove(self)
-                return True
+                return True # Survivor will be deleted (main loop)
 
+            # The fading phase is still in progress.
+            # fade_progress' is used as a coefficient to control 
+            # fading of RGB values.
             else:
-                # Fading de la couleur vers le blanc
-                r = int(self.color_critical[0] + (WHITE[0] - self.color_critical[0]) * fade_progress)
-                g = int(self.color_critical[1] + (WHITE[1] - self.color_critical[1]) * fade_progress)
-                b = int(self.color_critical[2] + (WHITE[2] - self.color_critical[2]) * fade_progress)
+                r = int(self.color_critical[0] + (self.final_fading_color[0] - self.color_critical[0]) * fade_progress)
+                g = int(self.color_critical[1] + (self.final_fading_color[1] - self.color_critical[1]) * fade_progress)
+                b = int(self.color_critical[2] + (self.final_fading_color[2] - self.color_critical[2]) * fade_progress)
                 self.color_immobilized = [r, g, b]
         
+        # The function stops because no movement needs to be initiated 
+        # since the Survivor is immobilized. However, it does not need 
+        # to be deleted yet, since it is still in the fading phase, 
+        # which is why False is returned.
         if self.immobilized or self.fading:
             return False
 
+        # - - - - - - - - - - MOUVEMENT - - - - - - - - - -
+
+        # - - - - CRITICAL MODE
+
+        # The Survivor's energy has reached a critical threshold, 
+        # and its speed mode changes.
         if self.energy <= self.energy_critical:
             self.in_critical = True
             self.speed = self.speed_critical
+        # Survivor's energy level is high enough.
         else:
             self.in_critical = False
             self.speed = self.speed_default
 
+        # As Survivor's energy level becomes critical, the radius of 
+        # his sensory field shrinks. 
         if self.in_critical and self.sensorial_radius > self.survivor_radius:
             if self.timer("sensorial_radius", 0.5):
                 self.sensorial_radius = max(self.survivor_radius, (self.energy / self.energy_critical) * self.sensorial_radius_default)
@@ -210,24 +271,31 @@ class Survivor:
         elif not self.in_critical:
             self.sensorial_radius = self.sensorial_radius_default
         
-        else:
-            pass
-        
-        # Search mode : not in danger
+        # - - - - NORMAL MODE
+
+        # The Survivor is in no danger and moves randomly.
         if not self.in_danger:
             self.x += self.dx * self.speed
             self.y += self.dy * self.speed
 
+            # As the Survivor moves, it loses energy.
+            # In order to control the frequency of energy loss, 
+            # puncture is done in a timer.
             if self.timer("energy_loss", self.energy_loss_frequency):
                 if self.in_follow:
                     self.energy -= self.energy_loss_follow
                 else:
                     self.energy -= self.energy_loss_normal
 
+            # The change of direction takes place in a timer of random 
+            # duration, so the Survivor will hold its directions for 
+            # different lengths of time.
             if self.timer("direction", random.uniform(self.direction_duration_min, self.direction_duration_max)):
                 self.change_direction()
 
-        # Escape mode : in danger
+        # - - - - DANGER MODE
+
+        # Survivor is in danger and flees
         else:
             if not self.in_critical:
                 self.x += self.dx * self.speed_flee
@@ -236,11 +304,15 @@ class Survivor:
                 self.x += self.dx * self.speed_flee_critical
                 self.y += self.dy * self.speed_flee_critical
 
+            # Energy loss in danger mode.
             if self.timer("energy_loss", self.energy_loss_frequency):
                 self.energy -= self.energy_loss_danger
 
+            # Flee duration
             if self.timer("flee", self.flee_duration):
                 self.in_danger = False
+
+        # - - - - SURVIVOR HAS MOVED OUTSIDE THE SURFACE
 
         # If the Survivor goes out on one side of the 
         # surface, it comes back in on the other.
@@ -259,6 +331,9 @@ class Survivor:
         return False
 
     def show(self):
+        """Displays the Survivor on screen according to 
+        its status.
+        """        
         if self.in_danger:
             color = self.color_danger
         elif self.in_follow:
@@ -282,7 +357,12 @@ class Survivor:
             else:
                 pygame.draw.circle(screen, self.sensorial_field_color, (int(self.x), int(self.y)), self.sensorial_radius, 1)
     
-    def get_pos(self):
+    def get_pos(self) -> tuple:
+        """Returns Survivor coordinates.
+
+        Returns:
+            tuple: Survivor coordinates.
+        """        
         return self.x, self.y
 
 class Danger:
@@ -324,13 +404,18 @@ food = Food(WIDTH//2, HEIGHT//2)
 survivor_zero = Survivor(0, 0) # Survivor model
 survivors = []
 
+# - - - - - - - - - - SURVIVORS CREATION - - - - - - - - - -
 for _ in range(NB_OF_SURVIVORS):
     radius = survivor_zero.sensorial_radius
+    limit_edge = survivor_zero.sensorial_radius
 
+    # The Survivor's coordinates are generated in such a way that the 
+    # Danger isn't in his sensory field and so that it's not too close 
+    # to the edge of the surface.
     far_enough_from_danger = False
     while not far_enough_from_danger:
-        x = random.randint(10, WIDTH - 10)
-        y = random.randint(10, HEIGHT - 10)
+        x = random.randint(limit_edge, WIDTH - limit_edge)
+        y = random.randint(limit_edge, HEIGHT - limit_edge)
         if get_distance((x, y), danger.get_pos()) <= radius + danger.edge:
             print("TOO CLOSE AVOIDED")
             continue
@@ -340,9 +425,10 @@ for _ in range(NB_OF_SURVIVORS):
     survivor = Survivor(x, y)
     survivors.append(survivor)
 
-# Boucle principale
+# - - - - - - - - - - MAIN LOOP - - - - - - - - - -
 running = True
 clock = pygame.time.Clock()
+
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -351,12 +437,11 @@ while running:
     # Surface erasing
     screen.fill(WHITE)
 
-    # Updating and displaying Survivors
+    # - - - - - - - - - - DANGER DETECTION - - - - - - - - - -
     for survivor in survivors:
         #print(survivor.energy, end="\r")
-        # - - - - Direct contact with danger - - - -
-        # Recovering the distance between Survivor and 
-        # Danger
+
+        # Recovering the distance between Survivor and Danger
         danger_distance = get_distance(survivor.get_pos(), danger.get_pos())
         
         # Danger is in the area of Survivor's sensory field.
@@ -378,7 +463,7 @@ while running:
                 survivor.dx = dx / norm
                 survivor.dy = dy / norm
 
-    # - - - - Interaction with other survivors - - - -
+    # - - - - - - - - - - FOLLOW DETECTION - - - - - - - - - -
     for survivor in survivors:
         # If a Survivor encounters another Survivor in 
         # danger within its sensory field, it follows it 
@@ -393,12 +478,19 @@ while running:
                         survivor.dy = other_survivor.dy
                         break  # Another Survivor in danger
 
-    # Move and show survivors
+    # - - - - - - - - - - MOVE & SHOW SURVIVORS - - - - - - - - - -
+    
+    # Deleting an element from a list during its iteration can lead 
+    # to unforeseen behavior, so the Survivor to be deleted is stored 
+    # in this list to avoid deleting it during the iteration of the 
+    # Survivor list.
     to_remove = []
+
     for idx, survivor in enumerate(survivors):
         if idx == 0:
             print(survivor.energy, end="\r")
 
+        # If the method returns True, the Survivor must be deleted.
         should_remove = survivor.move()
         survivor.show()
 
@@ -407,9 +499,12 @@ while running:
 
         #pygame.draw.line(screen, (255,0,0), survivor.get_pos(), danger.get_pos())
 
+    # - - - - - - - - - - THE REAPER ROOM - - - - - - - - - -
+    # Survivors deletion
     for survivor in to_remove:
         survivors.remove(survivor)
 
+    # - - - - - - - - - - OTHER - - - - - - - - - -
     danger.show()
     food.show()
 
