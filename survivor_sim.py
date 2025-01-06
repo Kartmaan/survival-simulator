@@ -12,31 +12,16 @@ pygame.display.set_caption("Survivors sim")
 
 FPS = 30
 
-# Couleurs
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-RED = (255, 0, 0)
+# Colors
+WHITE = [255, 255, 255]
+BLACK = [45, 45, 45]
+RED = [200, 0, 0]
+GREEN = [0, 200, 0]
+BLUE = [0, 0, 255]
+ORANGE = [255, 165, 0]
 
-NB_OF_SURVIVORS = 1
-
-def midpoint(point1: tuple, 
-             point2: tuple,
-             offset: float = 0.0) -> pygame.math.Vector2:
-    """Returns the central point between two coordinates or a 
-    point offset from this center
-
-    Args:
-        point1 : Coordinates of the 1st point
-        point2 : Coordinates of the 2nd point
-        offset : Offset from center (-/+) (default = 0.0)
-
-    Returns:
-        tuple: The coordinates of the desired point
-    """
-    x = (point1[0] + point2[0]) / 2 + offset * (point2[0] - point1[0]) / np.linalg.norm([point2[0] - point1[0], point2[1] - point1[1]])
-    y = (point1[1] + point2[1]) / 2 + offset * (point2[1] - point1[1]) / np.linalg.norm([point2[0] - point1[0], point2[1] - point1[1]])
-    
-    return pygame.math.Vector2(x, y)
+NB_OF_SURVIVORS = 15
+SHOW_SENSORIAL_FIELD = True
 
 def get_distance(p1: tuple, p2: tuple) -> float:
   """Returns the Euclidean distance between two coordinates
@@ -52,43 +37,60 @@ def get_distance(p1: tuple, p2: tuple) -> float:
   distance = np.linalg.norm(np.array(p2) - np.array(p1))
   return distance
 
-def angle(survivor_pos: tuple, danger_pos: tuple):
-    return np.arctan2(danger_pos[1] - survivor_pos[1], danger_pos[0], survivor_pos[0])
-
 class Survivor:
     def __init__(self, x, y):
+        # Position / Direction
         self.x = x
         self.y = y
         self.dx = 0.0
         self.dy = 0.0
 
+        # Speed
         self.speed_default = 4
         self.speed = self.speed_default
-        self.speed_critical = self.speed / 2
+        self.speed_critical = self.speed / 3
+        self.speed_flee = self.speed + 2
+        self.speed_flee_critical = self.speed_critical + 2
 
-        self.timers = {}
+        # Time management
+        self.survivor_timers = {}
+        self.direction_duration_min = 2
+        self.direction_duration_max = 7
+        self.flee_duration = 3
+        self.fade_duration = 5
+        self.immobilization_time = 5
 
-        self.survivor_radius_default = 10
+        # Size
+        self.survivor_radius_default = 5
         self.survivor_radius = self.survivor_radius_default
-        
         self.sensorial_radius_default = self.survivor_radius * 5
         self.sensorial_radius = self.survivor_radius_default
 
-        self.color = [0, 200, 0]
-        self.color_danger = [200, 0, 0]
-
-        self.flee_speed = self.speed + 2
-        self.flee_duration = 3
-
+        # Colors
+        self.color = GREEN
+        self.color_danger = RED
+        self.color_follow = ORANGE
+        self.color_critical = BLACK
+        self.color_immobilized = self.color_critical.copy()
+        self.sensorial_field_color = GREEN
+        self.sensorial_field_color_follow = ORANGE
+        self.sensorial_field_color_danger = RED
+        self.sensorial_field_color_critical = BLACK
+        
+        # States
         self.in_danger = False
         self.in_follow = False
+        self.in_critical = False
+        self.immobilized = False
+        self.fading = False
 
+        # Energy management
         self.energy_default = 50
         self.energy = self.energy_default
-        self.in_critical = False
         self.energy_critical = self.energy_default / 4
         self.energy_loss_frequency = 1 # In second
         self.energy_loss_normal = 0.5 # Per second
+        self.energy_loss_follow = 1 # Per second
         self.energy_loss_danger = 1.5 # Per second
 
     def timer(self, timer_name: str, duration: float) -> bool:
@@ -119,8 +121,8 @@ class Survivor:
         # The function returns False, as the timer has 
         # just been added and therefore cannot have 
         # already elapsed.
-        if timer_name not in self.timers:
-            self.timers[timer_name] = current_time
+        if timer_name not in self.survivor_timers:
+            self.survivor_timers[timer_name] = current_time
             return False
     
         # We assume that the timer name is already present 
@@ -132,9 +134,9 @@ class Survivor:
         # duration, then the dictionary value is updated 
         # and the function returns True.
         # Otherwise the function returns False.
-        elapsed_time = current_time - self.timers[timer_name]
+        elapsed_time = current_time - self.survivor_timers[timer_name]
         if elapsed_time >= duration:
-            self.timers[timer_name] = current_time
+            self.survivor_timers[timer_name] = current_time
             return True
 
         return False
@@ -161,17 +163,55 @@ class Survivor:
             in its sensory field, and flees by increasing 
             its speed.
         """
+
+        if self.energy <= 0 and not self.immobilized:
+            self.immobilized = True
+            self.survivor_timers["immobilization"] = pygame.time.get_ticks() / 1000.0
+        
+        if self.immobilized:
+            if self.timer("immobilization", self.immobilization_time):
+                self.fading = True
+                self.survivor_timers["fade"] = pygame.time.get_ticks() / 1000.0
+            
+        if self.fading:
+            elapsed_fade_time = (pygame.time.get_ticks() / 1000.0) - self.survivor_timers["fade"]
+            fade_progress = elapsed_fade_time / self.fade_duration
+            #print(f"elapsed_fade_time: {elapsed_fade_time}, fade_progress: {fade_progress}")
+
+            TOLERANCE = 1e-2
+            if fade_progress >= 1 - TOLERANCE:
+                #print("FADING OVER")
+                self.immobilized = False
+                self.fading = False
+                #survivors.remove(self)
+                return True
+
+            else:
+                # Fading de la couleur vers le blanc
+                r = int(self.color_critical[0] + (WHITE[0] - self.color_critical[0]) * fade_progress)
+                g = int(self.color_critical[1] + (WHITE[1] - self.color_critical[1]) * fade_progress)
+                b = int(self.color_critical[2] + (WHITE[2] - self.color_critical[2]) * fade_progress)
+                self.color_immobilized = [r, g, b]
+        
+        if self.immobilized or self.fading:
+            return False
+
         if self.energy <= self.energy_critical:
             self.in_critical = True
+            self.speed = self.speed_critical
         else:
             self.in_critical = False
+            self.speed = self.speed_default
 
         if self.in_critical and self.sensorial_radius > self.survivor_radius:
             if self.timer("sensorial_radius", 0.5):
-                new_radius = (self.energy / self.energy_critical) * self.sensorial_radius_default
-                self.sensorial_radius = new_radius
-        else:
+                self.sensorial_radius = max(self.survivor_radius, (self.energy / self.energy_critical) * self.sensorial_radius_default)
+        
+        elif not self.in_critical:
             self.sensorial_radius = self.sensorial_radius_default
+        
+        else:
+            pass
         
         # Search mode : not in danger
         if not self.in_danger:
@@ -179,15 +219,22 @@ class Survivor:
             self.y += self.dy * self.speed
 
             if self.timer("energy_loss", self.energy_loss_frequency):
-                self.energy -= self.energy_loss_normal
+                if self.in_follow:
+                    self.energy -= self.energy_loss_follow
+                else:
+                    self.energy -= self.energy_loss_normal
 
-            if self.timer("direction", random.uniform(2,7)):
+            if self.timer("direction", random.uniform(self.direction_duration_min, self.direction_duration_max)):
                 self.change_direction()
 
         # Escape mode : in danger
         else:
-            self.x += self.dx * self.flee_speed
-            self.y += self.dy * self.flee_speed
+            if not self.in_critical:
+                self.x += self.dx * self.speed_flee
+                self.y += self.dy * self.speed_flee
+            else:
+                self.x += self.dx * self.speed_flee_critical
+                self.y += self.dy * self.speed_flee_critical
 
             if self.timer("energy_loss", self.energy_loss_frequency):
                 self.energy -= self.energy_loss_danger
@@ -208,30 +255,33 @@ class Survivor:
             self.y = HEIGHT + self.survivor_radius
         elif self.y - self.survivor_radius > HEIGHT:
             self.y = -self.survivor_radius
-
-        if self.energy <= 0:
-            self.energy = 0
+        
+        return False
 
     def show(self):
-        # Survivor is in danger
-        if self.in_danger and not self.in_follow:
-            pygame.draw.circle(screen, tuple(self.color_danger), (int(self.x), int(self.y)), self.survivor_radius)
-            pygame.draw.circle(screen, (255, 0, 0), (int(self.x), int(self.y)), self.sensorial_radius, 3)
-
-        # Survivor follows an other Survivor in danger
-        elif self.in_follow: #and not self.in_danger:
-            pygame.draw.circle(screen, tuple(self.color_danger), (int(self.x), int(self.y)), self.survivor_radius)
-            pygame.draw.circle(screen, (255, 165, 0), (int(self.x), int(self.y)), self.sensorial_radius, 3)
-
-        elif self.in_critical:
-            pygame.draw.circle(screen, (42, 42, 42), (int(self.x), int(self.y)), self.survivor_radius)
-            pygame.draw.circle(screen, (0, 0, 0), (int(self.x), int(self.y)), self.sensorial_radius, 1)
-
-        # Survivor is ok
+        if self.in_danger:
+            color = self.color_danger
+        elif self.in_follow:
+            color = self.color_follow
+        elif self.in_critical and not self.immobilized:
+            color = self.color_critical
+        elif self.immobilized:
+            color = self.color_immobilized
         else:
-            pygame.draw.circle(screen, tuple(self.color), (int(self.x), int(self.y)), self.survivor_radius)
-            pygame.draw.circle(screen, (0, 0, 0), (int(self.x), int(self.y)), self.sensorial_radius, 1)
+            color = self.color
 
+        pygame.draw.circle(screen, color, (int(self.x), int(self.y)), self.survivor_radius)
+        
+        if SHOW_SENSORIAL_FIELD and not self.immobilized:
+            if self.in_danger:
+                pygame.draw.circle(screen, self.sensorial_field_color_danger, (int(self.x), int(self.y)), self.sensorial_radius, 3)
+            elif self.in_follow:
+                pygame.draw.circle(screen, self.sensorial_field_color_follow, (int(self.x), int(self.y)), self.sensorial_radius, 3)
+            elif self.in_critical:
+                pygame.draw.circle(screen, self.sensorial_field_color_critical, (int(self.x), int(self.y)), self.sensorial_radius, 3)
+            else:
+                pygame.draw.circle(screen, self.sensorial_field_color, (int(self.x), int(self.y)), self.sensorial_radius, 1)
+    
     def get_pos(self):
         return self.x, self.y
 
@@ -275,7 +325,7 @@ survivor_zero = Survivor(0, 0) # Survivor model
 survivors = []
 
 for _ in range(NB_OF_SURVIVORS):
-    radius = survivor_zero.survivor_radius
+    radius = survivor_zero.sensorial_radius
 
     far_enough_from_danger = False
     while not far_enough_from_danger:
@@ -312,7 +362,7 @@ while running:
         # Danger is in the area of Survivor's sensory field.
         # Survivor enters 'in_danger' mode and an escape 
         # vector is generated.
-        if danger_distance - 5 < survivor.sensorial_radius:
+        if danger_distance - (danger.edge/2) < survivor.sensorial_radius:
             survivor.in_danger = True
 
             # The difference between the Survivor and 
@@ -344,14 +394,22 @@ while running:
                         break  # Another Survivor in danger
 
     # Move and show survivors
-    for survivor in survivors:
-        print(survivor.energy, end="\r")
-        
-        survivor.move()
+    to_remove = []
+    for idx, survivor in enumerate(survivors):
+        if idx == 0:
+            print(survivor.energy, end="\r")
+
+        should_remove = survivor.move()
         survivor.show()
 
+        if should_remove:
+            to_remove.append(survivor)
+
         #pygame.draw.line(screen, (255,0,0), survivor.get_pos(), danger.get_pos())
-    
+
+    for survivor in to_remove:
+        survivors.remove(survivor)
+
     danger.show()
     food.show()
 
