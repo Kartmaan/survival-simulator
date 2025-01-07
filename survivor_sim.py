@@ -20,8 +20,9 @@ GREEN = [0, 200, 0]
 BLUE = [0, 0, 255]
 ORANGE = [255, 165, 0]
 
-NB_OF_SURVIVORS = 150
+NB_OF_SURVIVORS = 50
 SHOW_SENSORIAL_FIELD = False
+SHOW_DISTANCE_LINE = False
 
 def get_distance(p1: tuple, p2: tuple) -> float:
   """Returns the Euclidean distance between two coordinates.
@@ -61,7 +62,7 @@ class Survivor:
         # Speed
         self.speed_default = 4
         self.speed = self.speed_default
-        self.speed_critical = self.speed / 3
+        self.speed_critical = self.speed / 4
         self.speed_flee = self.speed + 2
         self.speed_flee_critical = self.speed_critical + 2
 
@@ -99,7 +100,7 @@ class Survivor:
         self.fading = False
 
         # Energy management
-        self.energy_default = 50
+        self.energy_default = 25
         self.energy = self.energy_default
         self.energy_critical = self.energy_default / 4
         self.energy_loss_frequency = 1 # In second
@@ -228,8 +229,8 @@ class Survivor:
             TOLERANCE = 1e-2
             if fade_progress >= 1 - TOLERANCE:
                 #print("FADING OVER")
-                self.immobilized = False
-                self.fading = False
+                #self.immobilized = False
+                #self.fading = False
                 return True # Survivor will be deleted (main loop)
 
             # The fading phase is still in progress.
@@ -333,17 +334,20 @@ class Survivor:
     def show(self):
         """Displays the Survivor on screen according to 
         its status.
-        """        
-        if self.in_danger:
-            color = self.color_danger
-        elif self.in_follow:
-            color = self.color_follow
-        elif self.in_critical and not self.immobilized:
-            color = self.color_critical
-        elif self.immobilized:
+        """
+        if self.fading or self.immobilized:
             color = self.color_immobilized
-        else:
-            color = self.color
+        else:        
+            if self.in_danger:
+                color = self.color_danger
+            elif self.in_follow:
+                color = self.color_follow
+            elif self.in_critical and not self.immobilized:
+                color = self.color_critical
+            elif self.immobilized:
+                color = self.color_immobilized
+            else:
+                color = self.color
 
         pygame.draw.circle(screen, color, (int(self.x), int(self.y)), self.survivor_radius)
         
@@ -492,12 +496,14 @@ while running:
 
         # If the method returns True, the Survivor must be deleted.
         should_remove = survivor.move()
-        survivor.show()
-
-        if should_remove:
+        #survivor.show()
+        if not should_remove:
+            survivor.show()
+        else:
             to_remove.append(survivor)
 
-        #pygame.draw.line(screen, (255,0,0), survivor.get_pos(), danger.get_pos())
+        if SHOW_DISTANCE_LINE:
+            pygame.draw.line(screen, (255,0,0), survivor.get_pos(), danger.get_pos())
 
     # - - - - - - - - - - THE REAPER ROOM - - - - - - - - - -
     # Survivors deletion
