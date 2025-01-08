@@ -1,4 +1,5 @@
 import pygame
+from pygame.math import Vector2
 import random
 import numpy as np
 
@@ -20,11 +21,11 @@ GREEN = [0, 200, 0]
 BLUE = [0, 0, 255]
 ORANGE = [255, 165, 0]
 
-NB_OF_SURVIVORS = 50
+NB_OF_SURVIVORS = 150
 SHOW_SENSORIAL_FIELD = False
 SHOW_DISTANCE_LINE = False
 
-def get_distance(p1: tuple, p2: tuple) -> float:
+def get_distance(p1: Vector2, p2: Vector2) -> float:
   """Returns the Euclidean distance between two coordinates.
 
   Args:
@@ -35,7 +36,8 @@ def get_distance(p1: tuple, p2: tuple) -> float:
   The distance between the two coordinates 
   """
   #distance = np.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
-  distance = np.linalg.norm(np.array(p2) - np.array(p1))
+  #distance = np.linalg.norm(np.array(p2) - np.array(p1))
+  distance = p1.distance_to(p2)
   return distance
 
 def current_time() -> float:
@@ -52,6 +54,17 @@ def current_time() -> float:
     return pygame.time.get_ticks() / 1000.0
 
 class Survivor:
+    """The Survivor moves randomly across the surface, 
+    using its sensory field to search for food, which 
+    increases its energy, and to flee danger, which causes 
+    it to lose energy. As a matter of survival instinct, 
+    if a Survivor encounters another fleeing, he follows 
+    him. During movement, the Survivor loses energy, even 
+    more so if he's fleeing, and if he reaches a critical 
+    threshold, his sensory field is reduced, as is his 
+    speed. If his energy reaches zero, the Survivor is 
+    immobilized and dies.
+    """    
     def __init__(self, x, y):
         # Position / Direction
         self.x = x
@@ -100,7 +113,7 @@ class Survivor:
         self.fading = False
 
         # Energy management
-        self.energy_default = 25
+        self.energy_default = 50
         self.energy = self.energy_default
         self.energy_critical = self.energy_default / 4
         self.energy_loss_frequency = 1 # In second
@@ -361,28 +374,119 @@ class Survivor:
             else:
                 pygame.draw.circle(screen, self.sensorial_field_color, (int(self.x), int(self.y)), self.sensorial_radius, 1)
     
-    def get_pos(self) -> tuple:
+    def get_pos(self) -> Vector2:
         """Returns Survivor coordinates.
 
         Returns:
             tuple: Survivor coordinates.
         """        
-        return self.x, self.y
+        pos = self.x, self.y
+        return pygame.math.Vector2(pos)
 
 class Danger:
     def __init__(self, x, y):
-        self.x = x
-        self.y = y
+        self.initial_pos = Vector2(x, y)
+        self.pos = self.initial_pos.copy()
         self.edge = 20
         self.color = [255, 0, 0]
-        self.damage = 2
+        self.damage = 1
+        self.nb_of_hits = 0
+
+        self.target = None
+        self.attacking = False
+        self.returning = False
+
+        self.attack_speed = 7
+        self.return_speed = 6
+        self.attack_duration = 0.3
+        self.return_duration = 0.4
+
+        self.angle = 0
+        self.rotation_speed = 10
+        self.rotation_speed_max = 30
+
+        self.danger_timers = {}
+    
+    def timer(self, timer_name: str, duration: float) -> bool:
+        """Checks if a timer has expired.
+
+        This allows each Survivor to have its own timers 
+        and therefore to have a personalized time management 
+        system for each of them. 
+
+        Args:
+            timer_name (str): Timer name.
+            duration (float): Desired duration in seconds.
+
+        Returns:
+            bool: True if time is up, False otherwise.
+        """
+        now = current_time()
+        
+        if timer_name not in self.danger_timers:
+            self.danger_timers[timer_name] = now
+            return False
+    
+        elapsed_time = now - self.danger_timers[timer_name]
+        if elapsed_time >= duration:
+            self.danger_timers[timer_name] = now
+            return True
+
+        return False
+
+    def attack(self, target_pos: Vector2):
+        # Initiating the attack movement
+        if not self.attacking and not self.returning:
+            self.target = target_pos
+            self.attacking = True
+            self.danger_timers["attack"] = current_time()
+        
+        # Attack movement
+        if self.attacking:
+            elapsed_attack_time = current_time() - self.danger_timers["attack"]
+            if elapsed_attack_time <= self.attack_duration:
+                direction = (self.target - self.pos)
+                if direction.length() > 0:  # Éviter un vecteur nul
+                    direction = direction.normalize()
+                    self.pos += direction * self.attack_speed
+            else:
+                self.attacking = False
+                self.returning = True
+                self.danger_timers["return"] = current_time()
+        
+        # Return movement
+        if self.returning:
+            elapsed_return_time = current_time() - self.danger_timers["return"]
+            if elapsed_return_time <= self.return_duration:
+                direction = (self.initial_pos - self.pos)
+                if direction.length() > 0:  # Éviter un vecteur nul
+                    direction = direction.normalize()
+                    self.pos += direction * self.return_speed
+            else:
+                self.nb_of_hits += 1
+                self.returning = False
+                self.pos = self.initial_pos.copy()
     
     def show(self):
-        danger_rect = pygame.Rect(self.x, self.y, self.edge, self.edge)
-        pygame.draw.rect(screen, tuple(self.color), danger_rect)
+        x = self.pos.x
+        y = self.pos.y
 
-    def get_pos(self):
-        return self.x + self.edge // 2, self.y + self.edge // 2
+        danger_rect = pygame.Rect(x, y, self.edge, self.edge)
+
+        surface = pygame.Surface(danger_rect.size, pygame.SRCALPHA)
+        surface.fill((255, 0, 0, 128))
+
+        rotated_surface = pygame.transform.rotate(surface, self.angle)
+        rotated_rect = rotated_surface.get_rect(center = danger_rect.center)
+
+        self.angle += self.rotation_speed
+
+        screen.blit(rotated_surface, rotated_rect)
+        #pygame.draw.rect(screen, tuple(self.color), danger_rect)
+
+    def get_pos(self) -> Vector2:
+        pos = self.pos.x + self.edge // 2, self.pos.y + self.edge // 2
+        return pygame.math.Vector2(pos)
 
 class Food:
     def __init__(self, x, y):
@@ -399,8 +503,9 @@ class Food:
         pygame.draw.rect(screen, tuple(self.color), food_rect)
         pygame.draw.circle(screen, (0, 255, 0), (self.x + self.edge//2, self.y + self.edge//2), self.field_radius, 3)
     
-    def get_pos(self):
-        return self.x, self.y
+    def get_pos(self) -> Vector2:
+        pos = pygame.math.Vector2(self.x, self.y)
+        return pos
 
 danger = Danger(random.randint(50, WIDTH-50), random.randint(50, HEIGHT-50))
 food = Food(WIDTH//2, HEIGHT//2)
@@ -420,7 +525,7 @@ for _ in range(NB_OF_SURVIVORS):
     while not far_enough_from_danger:
         x = random.randint(limit_edge, WIDTH - limit_edge)
         y = random.randint(limit_edge, HEIGHT - limit_edge)
-        if get_distance((x, y), danger.get_pos()) <= radius + danger.edge:
+        if get_distance(Vector2(x, y), danger.get_pos()) <= radius + danger.edge:
             print("TOO CLOSE AVOIDED")
             continue
         else:
@@ -451,15 +556,21 @@ while running:
         # Danger is in the area of Survivor's sensory field.
         # Survivor enters 'in_danger' mode and an escape 
         # vector is generated.
+
+        if danger.attacking or danger.returning:
+            danger.attack(survivor.get_pos())
+
         if danger_distance - (danger.edge/2) < survivor.sensorial_radius:
             survivor.in_danger = True
+
+            danger.attack(survivor.get_pos())
 
             # The difference between the Survivor and 
             # Danger coordinates is calculated. This 
             # gives the horizontal and vertical components
             # of the vector from Danger to Survivor.
-            dx = survivor.x - danger.x
-            dy = survivor.y - danger.y
+            dx = survivor.x - danger.pos.x
+            dy = survivor.y - danger.pos.y
 
             # Vector normalization by Pythagorean theorem.
             norm = np.sqrt(dx**2 + dy**2)
