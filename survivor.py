@@ -1,5 +1,5 @@
 from pygame_options import pygame, screen, WIDTH, HEIGHT
-from utils import Vector2, random, current_time, get_distance, np
+from utils import Vector2, current_time, get_distance, np
 from style import colors
 from food import Food
 
@@ -43,7 +43,6 @@ class Survivor:
         self.fade_duration = 5
         self.immobilization_time = 5
         self.eating_cooldown = 5
-        #self.eating_oscillation = self.energy_bonus_frequency
 
         # Size
         self.survivor_radius_default = 4
@@ -78,7 +77,7 @@ class Survivor:
         self.fading = False
 
         # Energy management
-        self.energy_default = 50
+        self.energy_default = 20
         self.energy = self.energy_default
         self.energy_hungry = self.energy_default / 2
         self.energy_critical = self.energy_default / 4
@@ -88,9 +87,7 @@ class Survivor:
         self.energy_loss_danger = 1.5  # Per second
         self.energy_loss_frequency = 1  # In second
         self.energy_bonus_frequency = 0.5  # In second
-
-        # Survivors info
-        #self.all_survivors: list[Survivor] = []
+        self.energy_bonus_frequency_critical = 0.25
 
         # Food info
         self.food_object: Food = Food(0, 0)
@@ -143,7 +140,7 @@ class Survivor:
 
         return False
 
-    def change_direction(self):
+    def _change_direction(self):
         """Choosing a random direction by randomly changing
         the values of dx and dy.
 
@@ -157,13 +154,100 @@ class Survivor:
         self.dx = np.cos(angle)
         self.dy = np.sin(angle)
 
+    def _critical_mode(self):
+        # The Survivor has reached a critical energy level,
+        # his speed is reduced and his sensory field shrinks.
+
+        if self.energy <= self.energy_critical:
+            self.in_critical = True
+            self.speed = self.speed_critical
+        # Survivor's energy level is high enough.
+        else:
+            self.in_critical = False
+            self.speed = self.speed_default
+
+        # As Survivor's energy level becomes critical, the radius of
+        # his sensory field shrinks.
+        if self.in_critical and self.sensorial_radius > self.survivor_radius:
+            if self.timer("sensorial_radius", 0.5):
+                self.sensorial_radius = max(self.survivor_radius,
+                                            (self.energy / self.energy_critical) * self.sensorial_radius_default)
+
+        elif not self.in_critical:
+            self.sensorial_radius = self.sensorial_radius_default
+
+    def _search_mode(self, conditions: list[bool]):
+        if all(conditions):
+            self.x += self.dx * self.speed
+            self.y += self.dy * self.speed
+
+            # As the Survivor moves, it loses energy.
+            # In order to control the frequency of energy loss,
+            # puncture is done in a timer.
+            if self.timer("energy_loss", self.energy_loss_frequency):
+                if self.in_follow:
+                    self.energy -= self.energy_loss_follow
+                else:
+                    self.energy -= self.energy_loss_normal
+
+            # The change of direction takes place in a timer of random
+            # duration, so the Survivor will hold its directions for
+            # different lengths of time.
+            if self.timer("direction", np.random.uniform(self.direction_duration_min,
+                                                      self.direction_duration_max)):
+                if not self.food_rush and not self.eating:
+                    self._change_direction()
+
+    def _danger_mode(self):
+        """
+        Defines Survivor behavior when in_danger mode.
+        """
+        # Survivor is in danger and flees
+        if self.in_danger:
+            if not self.in_critical:
+                self.x += self.dx * self.speed_flee
+                self.y += self.dy * self.speed_flee
+            else:
+                self.x += self.dx * self.speed_flee_critical
+                self.y += self.dy * self.speed_flee_critical
+
+            # Energy loss in danger mode.
+            if self.timer("energy_loss", self.energy_loss_frequency):
+                self.energy -= self.energy_loss_danger
+
+            # Flee duration
+            if self.timer("flee", self.flee_duration):
+                self.in_danger = False
+
+    def _surface_overrun(self):
+        """
+        Defines the Survivor's behavior when it exceeds the limits of the surface.
+
+        If the Survivor exits on one side of the surface, it exits on the other.
+        """
+
+        # Exits from left or right side
+        if self.x + self.survivor_radius < 0:
+            self.x = WIDTH + self.survivor_radius
+        elif self.x - self.survivor_radius > WIDTH:
+            self.x = -self.survivor_radius
+
+        # Exits from top or bottom side
+        if self.y + self.survivor_radius < 0:
+            self.y = HEIGHT + self.survivor_radius
+        elif self.y - self.survivor_radius > HEIGHT:
+            self.y = -self.survivor_radius
+
     def move(self) -> bool:
         """Moves the Survivor in different modes:
             - Search mode: the Survivor moves randomly across the surface in search of food.
             - Rush mode : Survivor perceives food and rushes towards it.
+            - Eating mode : The Survivor no longer moves while he recovers energy.
             - Escape mode: the Survivor perceives danger in its sensory field, and flees by increasing its speed.
             - Critical mode: the Survivor has reached a critical energy threshold, and its movement speed decreases.
             - Immobilized mode: Survivor has no energy left and can't move anymore.
+
+            The method returns Booleans to indicate whether the Survivor should be deleted (True) or not (False).
 
             Returns:
                 bool: Returns True if the Survivor is to be deleted, False otherwise.
@@ -233,57 +317,17 @@ class Survivor:
             return False
 
         # - - - - - - - - - - MOVEMENT - - - - - - - - - -
-
         # - - - - CRITICAL MODE
-        # The Survivor has reached a critical energy level,
-        # his speed is reduced and his sensory field shrinks.
-
-        if self.energy <= self.energy_critical:
-            self.in_critical = True
-            self.speed = self.speed_critical
-        # Survivor's energy level is high enough.
-        else:
-            self.in_critical = False
-            self.speed = self.speed_default
-
-        # As Survivor's energy level becomes critical, the radius of
-        # his sensory field shrinks.
-        if self.in_critical and self.sensorial_radius > self.survivor_radius:
-            if self.timer("sensorial_radius", 0.5):
-                self.sensorial_radius = max(self.survivor_radius,
-                                            (self.energy / self.energy_critical) * self.sensorial_radius_default)
-
-        elif not self.in_critical:
-            self.sensorial_radius = self.sensorial_radius_default
+        # The Survivor has reached a critical energy level, his speed is reduced and his sensory field shrinks.
+        self._critical_mode()
 
         # - - - - SEARCH MODE
         # The Survivor has enough energy to randomly move at normal speed
         # searching for Food.
-
-        # The Survivor is in no danger and moves randomly.
-        if all(conditions_to_search):
-            self.x += self.dx * self.speed
-            self.y += self.dy * self.speed
-
-            # As the Survivor moves, it loses energy.
-            # In order to control the frequency of energy loss,
-            # puncture is done in a timer.
-            if self.timer("energy_loss", self.energy_loss_frequency):
-                if self.in_follow:
-                    self.energy -= self.energy_loss_follow
-                else:
-                    self.energy -= self.energy_loss_normal
-
-            # The change of direction takes place in a timer of random
-            # duration, so the Survivor will hold its directions for
-            # different lengths of time.
-            if self.timer("direction", random.uniform(self.direction_duration_min,
-                                                      self.direction_duration_max)):
-                if not self.food_rush and not self.eating:
-                    self.change_direction()
+        self._search_mode(conditions_to_search)
 
         # - - - - FOOD RUSH MODE
-        elif all(conditions_to_rush):
+        if all(conditions_to_rush):
             # The Survivor heads towards the Food coordinates.
             if self.food_rush and not self.eating:
                 direction = (self.food_object.pos - self.get_pos())
@@ -300,8 +344,7 @@ class Survivor:
 
                 # The Survivor must stop short of the Food coordinates to avoid wallowing pitifully on them.
                 # It stops in the olfactory field of the Food at a reasonable distance from it for greater visual
-                # clarity. The conditional distance lies within an interval, which means that if the Survivor enters
-                # 'hungry' mode when too close to the Food, detection will not happen.
+                # clarity.
                 #if self.food_field >= distance >= self.food_field / 2:
                 if distance <= self.food_object.scent_field_radius / 2:
                     self.food_rush = False
@@ -311,8 +354,13 @@ class Survivor:
 
             # The rush is over and the Survivor begins to consume the Food.
             elif not self.food_rush and self.eating:
+                if self.in_critical:
+                    bonus_frequency = self.energy_bonus_frequency_critical
+                else:
+                    bonus_frequency = self.energy_bonus_frequency
+
                 # The energy bonus occurs at a specific frequency
-                if self.timer("energy_bonus", self.energy_bonus_frequency):
+                if self.timer("energy_bonus", bonus_frequency):
                     self.energy += self.food_object.energy_bonus
 
                     if self.food_object.quantity > 0:
@@ -335,39 +383,10 @@ class Survivor:
                 return False
 
         # - - - - DANGER MODE
-
-        # Survivor is in danger and flees
-        elif self.in_danger:
-            if not self.in_critical:
-                self.x += self.dx * self.speed_flee
-                self.y += self.dy * self.speed_flee
-            else:
-                self.x += self.dx * self.speed_flee_critical
-                self.y += self.dy * self.speed_flee_critical
-
-            # Energy loss in danger mode.
-            if self.timer("energy_loss", self.energy_loss_frequency):
-                self.energy -= self.energy_loss_danger
-
-            # Flee duration
-            if self.timer("flee", self.flee_duration):
-                self.in_danger = False
+        self._danger_mode()
 
         # - - - - SURVIVOR HAS MOVED OUTSIDE THE SURFACE
-
-        # If the Survivor goes out on one side of the
-        # surface, it comes back in on the other.
-        # Exits from left or right side
-        if self.x + self.survivor_radius < 0:
-            self.x = WIDTH + self.survivor_radius
-        elif self.x - self.survivor_radius > WIDTH:
-            self.x = -self.survivor_radius
-
-        # Exits from top or bottom side
-        if self.y + self.survivor_radius < 0:
-            self.y = HEIGHT + self.survivor_radius
-        elif self.y - self.survivor_radius > HEIGHT:
-            self.y = -self.survivor_radius
+        self._surface_overrun()
 
         return False
 
@@ -394,7 +413,12 @@ class Survivor:
                 color = self.color
 
         if self.eating:
-            if self.timer("eating_oscillation", self.energy_bonus_frequency):
+            if self.in_critical:
+                bonus_frequency = self.energy_bonus_frequency_critical
+            else:
+                bonus_frequency = self.energy_bonus_frequency
+
+            if self.timer("eating_oscillation", bonus_frequency):
                 pygame.draw.circle(screen, color, (int(self.x), int(self.y)), self.survivor_radius_eating)
             else:
                 pygame.draw.circle(screen, color, (int(self.x), int(self.y)), self.survivor_radius)

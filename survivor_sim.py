@@ -9,17 +9,18 @@ from debug import DebugText
 debug_display = DebugText()
 
 DEBUG_MODE = True
-NB_OF_SURVIVORS = 160
+NB_OF_SURVIVORS = 130
 SHOW_DANGER_DISTANCE_LINE = False
 SHOW_FOOD_DISTANCE_LINE = False
 
 nb_of_death = 0
 
 danger_zero = Danger(0, 0)  # Danger model (not displayed)
-danger = Danger(random.randint(danger_zero.edge, WIDTH - danger_zero.edge), random.randint(50, HEIGHT - 50))
+danger = Danger(random.randint(danger_zero.edge*3, WIDTH - danger_zero.edge*3),
+                random.randint(danger_zero.edge*3, HEIGHT - danger_zero.edge*3))
 
 survivor_zero = Survivor(0, 0)  # Survivor model (not displayed)
-survivors = []  # Contains all generated Survivor
+survivors: list[Survivor] = []  # Contains all generated Survivor
 
 # - - - - - - - - - - FOOD CREATION - - - - - - - - - -
 # We make sure that the coordinates generated for Food are far enough away from Danger.
@@ -30,21 +31,26 @@ scent_radius = food_zero.scent_field_radius
 limit_edge = food_edge + (scent_radius * 2)
 min_distance_from_danger = WIDTH / 4
 
+x = random.randint(int(limit_edge), int(WIDTH - limit_edge))
+y = random.randint(int(limit_edge), int(HEIGHT - limit_edge))
+
+distance = get_distance(Vector2(x, y), danger.get_pos())
 far_enough_from_danger = False
-while not far_enough_from_danger:
-    x = random.randint(limit_edge, WIDTH - limit_edge)
-    y = random.randint(limit_edge, HEIGHT - limit_edge)
-    distance = get_distance(Vector2(x, y), danger.get_pos())
-    if distance < min_distance_from_danger:
-        continue
-    else:
-        far_enough_from_danger = True
+
+if distance < min_distance_from_danger:
+    while not far_enough_from_danger:
+        x = random.randint(limit_edge, WIDTH - limit_edge)
+        y = random.randint(limit_edge, HEIGHT - limit_edge)
+        distance = get_distance(Vector2(x, y), danger.get_pos())
+        if distance < min_distance_from_danger:
+            continue
+        else:
+            far_enough_from_danger = True
 
 food = Food(x, y)
 
 # - - - - - - - - - - SURVIVORS CREATION - - - - - - - - - -
 # We make sure that the coordinates generated for each Survivor are far enough away from Danger and Food.
-
 for _ in range(NB_OF_SURVIVORS):
     radius = survivor_zero.sensorial_radius
     limit_edge = survivor_zero.sensorial_radius
@@ -71,7 +77,152 @@ for _ in range(NB_OF_SURVIVORS):
     survivor = Survivor(x, y)
     survivors.append(survivor)
 
+def danger_detection():
+    """
+    Defines the conditions for a Survivor to detect a Danger.
+    """
+    # We send the Danger object to Food so that it can know its position at all times, which will be useful for
+    # ensuring that Food's respawn takes place at a reasonable distance from Danger.
+    food.danger_object = danger
+
+    for SURVIVOR in survivors:
+        # Recovering the distance between Survivor and Danger
+        danger_distance = get_distance(SURVIVOR.get_pos(), danger.get_pos())
+
+        # Danger is still in attack/return animation
+        if danger.attacking or danger.returning:
+            danger.attack(SURVIVOR.get_pos())
+
+        # Danger is in the area of Survivor's sensory field. Survivor enters 'in_danger' mode and an escape vector
+        # is generated. -- - (danger.edge / 2)
+        if danger_distance < SURVIVOR.sensorial_radius:
+            SURVIVOR.in_danger = True
+
+            danger.attack(SURVIVOR.get_pos())
+
+            # The difference between the Survivor and Danger coordinates is calculated. This gives the horizontal and
+            # vertical components of the vector from Danger to Survivor.
+            dx = SURVIVOR.pos.x - danger.pos.x
+            dy = SURVIVOR.pos.y - danger.pos.y
+
+            # Vector normalization by Pythagorean theorem.
+            norm = np.sqrt(dx ** 2 + dy ** 2)
+            if norm != 0:
+                SURVIVOR.dx = dx / norm
+                SURVIVOR.dy = dy / norm
+
+def follow_detection():
+    """
+    Determines whether a Survivor must follow another Survivor in_danger.
+
+    If a Survivor detects another Survivor in_danger in its sensory field, the latter transmits its escape vector to
+    the Survivor so that it takes the same direction.
+    """
+
+    # The Survivor will continue its follow as long as the Survivor being followed is in danger.
+    for SURVIVOR in survivors:
+        SURVIVOR.in_follow = False
+        if not SURVIVOR.in_danger:
+            for other_survivor in survivors:
+                if other_survivor != SURVIVOR and other_survivor.in_danger:
+                    if (get_distance(SURVIVOR.get_pos(), other_survivor.get_pos()) <
+                            (SURVIVOR.sensorial_radius + other_survivor.sensorial_radius)):
+                        SURVIVOR.in_follow = True
+                        # The Survivor in_danger transmits his escape vector to the other Survivors in his
+                        # sensory field.
+                        SURVIVOR.dx = other_survivor.dx
+                        SURVIVOR.dy = other_survivor.dy
+                        break  # Another Survivor in danger ?
+
+def food_detection():
+    """
+    Determines whether the Survivor has detected the Food.
+
+    Several conditions must be met for a Survivor to detect Food :
+    - its energy level is less than or equal to its 'energy_hungry' threshold
+    - it's not in danger
+    - it's not following a Survivor in danger
+    - it's not already in 'food_rush' mode
+    - it's not in 'eating' mode
+    - it's able to eat (not in eating_cooldown)
+    - it's not immobilized
+    - Food isn't full
+    """
+    for SURVIVOR in survivors:
+        conditions_to_detect_food = [SURVIVOR.energy <= SURVIVOR.energy_hungry, not SURVIVOR.in_danger,
+                                     not SURVIVOR.in_follow, not SURVIVOR.food_rush, not SURVIVOR.eating,
+                                     SURVIVOR.able_to_eat, not SURVIVOR.immobilized, not food.full]
+
+        # A Survivor has a cooldown before being able to eat again, and here we check whether it has expired.
+        if not SURVIVOR.able_to_eat:
+            if SURVIVOR.timer("eating_cooldown", SURVIVOR.eating_cooldown):
+                SURVIVOR.able_to_eat = True
+
+        # To check whether the maximum number of Survivors who can simultaneously eat the Food has been reached, we go
+        # through the list of Survivors and count those whose 'eating' and 'food_rush' status is True.
+        eaters = 0
+        in_rush = 0
+        for hungry_survivor in survivors:
+            if hungry_survivor.eating:
+                eaters += 1
+            if hungry_survivor.food_rush:
+                in_rush += 1
+
+        if eaters >= food.max_eaters or in_rush >= food.max_eaters:
+            food.full = True
+        else:
+            food.full = False
+
+        # Adding Food information to the debug
+        debug_display.add("Eaters", eaters)
+        debug_display.add("Food full", food.full)
+        debug_display.add("Food quantity", food.quantity)
+        debug_display.add("Food edge", round(food.edge, 2))
+        debug_display.add("Food radius", round(food.scent_field_radius, 2))
+
+        dist = get_distance(SURVIVOR.get_pos(), food.get_pos())
+
+        if all(conditions_to_detect_food):
+            # If the Survivor's sensory field overlaps the Food's olfactory field, then the Survivor has detected
+            # the Food. Its 'food_rush' mode is activated to send a signal to the 'move' method so that the Survivor
+            # moves in the direction of the Food.
+            if dist < food.scent_field_radius + SURVIVOR.sensorial_radius:
+                SURVIVOR.food_rush = True
+
+                # We send some information to Survivor about Food.
+                SURVIVOR.food_pos = food.get_pos()
+                SURVIVOR.food_field_radius = food.scent_field_radius
+                SURVIVOR.food_bonus = food.energy_bonus
+                SURVIVOR.food_object = food
+
+            # No detection, no rush.
+            else:
+                SURVIVOR.food_rush = False
+
+def slaughterhouse(survivors_to_remove: list[Survivor]):
+    """
+    Survivors who have to die reach their destiny
+
+    Args:
+        survivors_to_remove: list of Survivors to be deleted.
+    """
+    global nb_of_death
+
+    for SURVIVOR in survivors_to_remove:
+        survivors.remove(SURVIVOR)
+        nb_of_death += 1
+
+    # Counting the living and the dead (debug).
+    alive = NB_OF_SURVIVORS - nb_of_death
+    debug_display.add("Survivors alive", f"{alive}/{NB_OF_SURVIVORS} ({percent(alive, NB_OF_SURVIVORS)}%)")
+    debug_display.add("Survivors dead", f"{nb_of_death}/{NB_OF_SURVIVORS} "
+                                        f"({percent(nb_of_death, NB_OF_SURVIVORS)}%)")
+
 # - - - - - - - - - - MAIN LOOP - - - - - - - - - -
+# The logic of the main loop will essentially consist of a series of iterations on the 'survivors' list for each of
+# the main Survivor modes (in_danger, in_follow, ...) in order to check/modify their attributes or activate some of
+# their methods.
+
 running = True
 clock = pygame.time.Clock()
 
@@ -83,123 +234,22 @@ while running:
     # Surface erasing
     screen.fill(colors["BACKGROUND_COLOR"])
 
+    # Pygame options added to debug display.
     debug_display.add("Elapsed time", format_time(pygame.time.get_ticks()))
     debug_display.add("Window size", f"{WIDTH}x{HEIGHT} px")
     debug_display.add("FPS", round(clock.get_fps(), 2))
 
     # - - - - - - - - - - DANGER DETECTION - - - - - - - - - -
-    food.danger_object = danger
-
-    for survivor in survivors:
-        # print(survivor.energy, end="\r")
-
-        # Recovering the distance between Survivor and Danger
-        danger_distance = get_distance(survivor.get_pos(), danger.get_pos())
-
-        # Danger is in the area of Survivor's sensory field.
-        # Survivor enters 'in_danger' mode and an escape
-        # vector is generated.
-
-        if danger.attacking or danger.returning:
-            danger.attack(survivor.get_pos())
-
-        if danger_distance - (danger.edge / 2) < survivor.sensorial_radius:
-            survivor.in_danger = True
-
-            danger.attack(survivor.get_pos())
-
-            # The difference between the Survivor and
-            # Danger coordinates is calculated. This
-            # gives the horizontal and vertical components
-            # of the vector from Danger to Survivor.
-            dx = survivor.pos.x - danger.pos.x
-            dy = survivor.pos.y - danger.pos.y
-
-            # Vector normalization by Pythagorean theorem.
-            norm = np.sqrt(dx ** 2 + dy ** 2)
-            if norm != 0:
-                survivor.dx = dx / norm
-                survivor.dy = dy / norm
+    danger_detection()
 
     # - - - - - - - - - - FOLLOW DETECTION - - - - - - - - - -
-    # If a Survivor encounters another Survivor in danger within its sensory field, it follows it as it flees.
-    for survivor in survivors:
-        survivor.in_follow = False
-        if not survivor.in_danger:
-            for other_survivor in survivors:
-                if other_survivor != survivor and other_survivor.in_danger:
-                    if (get_distance(survivor.get_pos(), other_survivor.get_pos()) <
-                            (survivor.sensorial_radius + other_survivor.sensorial_radius)):
-                        survivor.in_follow = True
-                        survivor.dx = other_survivor.dx
-                        survivor.dy = other_survivor.dy
-                        break  # Another Survivor in danger
+    follow_detection()
 
     # - - - - - - - - - - FOOD DETECTION - - - - - - - - - -
-    # A Survivor can only detect Food if :
-    # - its energy level is less than or equal to its 'energy_hungry' threshold
-    # - it's not in danger
-    # - it's not following a Survivor in danger
-    # - it's not already in 'food_rush' mode
-    # - it's not in 'eating' mode
-    # - it's able to eat (not in eating_cooldown)
-    # - it's not immobilized
-    # - Food isn't full
-
-    for survivor in survivors:
-        conditions_to_detect_food = [survivor.energy <= survivor.energy_hungry, not survivor.in_danger,
-                                     not survivor.in_follow, not survivor.food_rush, not survivor.eating,
-                                     survivor.able_to_eat, not survivor.immobilized, not food.full]
-
-        # A Survivor has a cooldown before being able to eat again, and here we check whether it has expired.
-        if not survivor.able_to_eat:
-            if survivor.timer("eating_cooldown", survivor.eating_cooldown):
-                survivor.able_to_eat = True
-
-        # To check whether the maximum number of Survivors who can simultaneously eat the Food has been reached, we go
-        # through the list of Survivors and count those whose 'eating' and 'food_rush' status is True.
-        eaters = 0
-        in_rush = 0
-        for poor_survivor in survivors:
-            if poor_survivor.eating:
-                eaters += 1
-            if poor_survivor.food_rush:
-                in_rush += 1
-
-        debug_display.add("Eaters", eaters)
-        debug_display.add("Food full", food.full)
-        debug_display.add("Food quantity", food.quantity)
-        debug_display.add("Food edge", food.edge)
-        debug_display.add("Food radius", food.scent_field_radius)
-
-        if eaters >= food.max_eaters or in_rush >= food.max_eaters:
-            food.full = True
-        else:
-            food.full = False
-
-        distance = get_distance(survivor.get_pos(), food.get_pos())
-
-        if all(conditions_to_detect_food):
-            #survivor.food_object = food
-            # If the Survivor's sensory field overlaps the Food's olfactory field, then the Survivor has detected
-            # the Food. Its 'food_rush' mode is activated to send a signal to the 'move' method so that the Survivor
-            # moves in the direction of the Food.
-            # TODO : If the Survivor activates the 'food_rush' mode when it is at a distance less than the
-            #  'eater_radius', its rush movement must be in the opposite direction.
-            if distance < food.scent_field_radius + survivor.sensorial_radius:
-                survivor.food_rush = True
-
-                # We send some information to Survivor about Food.
-                survivor.food_pos = food.get_pos()
-                survivor.food_field_radius = food.scent_field_radius
-                survivor.food_bonus = food.energy_bonus
-                survivor.food_object = food
-
-            # No detection, no rush
-            else:
-                survivor.food_rush = False
+    food_detection()
 
     # - - - - - - - - - - MOVE & SHOW SURVIVORS - - - - - - - - - -
+    # All Survivor states have been updated, and now it's time to call their move and show methods.
 
     # Deleting an element from a list during its iteration can lead
     # to unforeseen behavior, so the Survivor to be deleted is stored
@@ -247,17 +297,9 @@ while running:
     debug_display.add("Danger rotation speed", f"{danger.rotation_speed}/{danger.rotation_speed_max}")
     debug_display.add("Danger rage", danger.rage)
 
-    # - - - - - - - - - - THE REAPER ROOM - - - - - - - - - -
-    # Survivors deletion
-    for survivor in to_remove:
-        survivors.remove(survivor)
-        nb_of_death += 1
+    # - - - - - - - - - - THE SLAUGHTERHOUSE - - - - - - - - - -
+    slaughterhouse(to_remove)
 
-    # Counting the living and the dead (debug).
-    alive = NB_OF_SURVIVORS - nb_of_death
-    debug_display.add("Survivors alive", f"{alive}/{NB_OF_SURVIVORS} ({percent(alive, NB_OF_SURVIVORS)}%)")
-    debug_display.add("Survivors dead", f"{nb_of_death}/{NB_OF_SURVIVORS} "
-                                        f"({percent(nb_of_death, NB_OF_SURVIVORS)}%)")
     # - - - - - - - - - - OTHER - - - - - - - - - -
     danger.show()
     food.show()
