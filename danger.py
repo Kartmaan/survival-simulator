@@ -4,11 +4,13 @@ from style import colors
 
 class Danger:
     """
+    Attacks Survivors.
+
     - The Danger is posted at a random location on the surface.
     - It has a rage level that determines the amount of damage it inflicts.
     - It attacks Survivors who get too close to it.
     - When attacking, the Danger moves rapidly back and forth in the direction of the targeted Survivor.
-    - Each successful attack (probability) drains part of the Survivor's energy.
+    - Todo: Each successful attack (probability) drains part of the Survivor's energy.
     - Each attack increases its rage level to a maximum threshold.
     - The Danger rotates on itself, its speed proportional to its rage level.
     - When the Danger spends a certain amount of time without attacking, its rage level decreases.

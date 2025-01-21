@@ -8,12 +8,17 @@ SHOW_SCENT_FIELD = True
 
 class Food:
     """
-    - Food has an odor field that can be detected by the Survivor's sensory field.
-    - It has an energy value that decreases as it is consumed by Survivors.
-    - When its energy value reaches zero, it disappears.
-    - There are several types of Food with different energy values, some of which can also be poisonous.
-    - A limited number of Survivors can consume the Food simultaneously
-    - If the Food is not consumed, it rots. The scent field narrows, the energy level drops and the Food disappears.
+    Food consumed by Survivors to boost their energy levels.
+
+    - Food has an olfactory field that can be detected by the Survivor's sensory field.
+    - It has a quantity value that decreases as it is consumed by Survivors.
+    - The olfactory field shrinks as food is consumed.
+    - When its energy value reaches zero, it disappears to appear elsewhere.
+    - A limited number of Survivors can consume the Food simultaneously.
+
+    Todo:
+     - If the food isn't consumed, it rots.
+     - Different types of Food
     """
     def __init__(self, x, y):
         # Position
@@ -46,13 +51,9 @@ class Food:
         self.quantity = self.quantity_max
         self.energy_bonus = 1
         self.max_eaters = 10
-        self.nb_of_eaters = 0
 
         # Danger info
         self.danger_object: Danger = Danger(0, 0)
-
-        # Survivors info
-        #self.all_survivors = []
 
     def timer(self, timer_name: str, duration: float) -> bool:
         """Checks if a timer has expired.
@@ -81,17 +82,13 @@ class Food:
 
         return False
 
-    # TODO: Find a new position for Food when self.quantity is zero.
     def find_a_new_place(self):
         """
-        Find a new place for Food
-
-        Returns:
-
+        Find a new place for Food.
         """
-
         width = screen.width
         height = screen.height
+
         danger_pos = self.danger_object.get_pos()
         limit_edge = self.edge_max + (self.scent_field_radius * 2)
         min_distance_from_danger = width / 4
@@ -114,38 +111,50 @@ class Food:
                     far_enough = True
 
         self.pos = Vector2(x, y)
+        self.x = self.pos.x
+        self.y = self.pos.y
 
         self.edge = self.edge_max
         self.scent_field_radius = self.scent_field_radius_max
         self.quantity = self.quantity_max
+        self.full = False
 
-        # for survivor in self.all_survivors:
-        #     survivor.eating = False
-
-    # TODO: Adjust self.edge according to self.quantity.
     def adjust_edge(self):
         """
+        Reduces 'self.edge' and 'self.scent_field_radius' according to 'self.quantity value'.
 
-        Returns:
-
+        The reduction is linear and proportional to quantity, between the maximum and minimum values defined for each
+        attribute. When `self.quantity` reaches 0, `self.edge` and `self.scent_field_radius` reach their respective
+        minimum values (`self.edge_min` and `self.scent_field_radius_min`).
         """
-        if self.quantity <= 0:
-            return self.edge_min
-
-        edge_range = self.edge_max - self.edge_min
         quantity_ratio = self.quantity / self.quantity_max
-        new_edge = self.edge_min + (edge_range * quantity_ratio)
+        # Edge reduction
+        if self.quantity > 0:
+            edge_range = self.edge_max - self.edge_min
+            #quantity_ratio = self.quantity / self.quantity_max
+            new_edge = self.edge_min + (edge_range * quantity_ratio)
 
-        self.edge = new_edge
+            self.edge = new_edge
+        else:
+            self.edge = self.edge_min
 
-        radius_range = self.scent_field_radius_max - self.scent_field_radius_min
-        new_radius = self.scent_field_radius_min + (radius_range * quantity_ratio)
+        # Scent radius reduction
+        if self.quantity > 0:
+            #quantity_ratio = self.quantity / self.quantity_max
+            radius_range = self.scent_field_radius_max - self.scent_field_radius_min
+            new_radius = self.scent_field_radius_min + (radius_range * quantity_ratio)
 
-        self.scent_field_radius = new_radius
+            self.scent_field_radius = new_radius
+        else:
+            self.scent_field_radius = self.scent_field_radius_min
 
     def show(self):
+        """
+        Display Food on screen.
+        """
         food_rect = pygame.Rect(self.pos.x, self.pos.y, self.edge, self.edge)
 
+        # Changes color depending on whether Food is full or not.
         if self.full:
             pygame.draw.rect(screen, tuple(self.color_full), food_rect)
         else:
@@ -156,5 +165,8 @@ class Food:
                                self.scent_field_radius, 2)
 
     def get_pos(self) -> Vector2:
+        """
+        Returns Food's coordinates.
+        """
         pos = pygame.math.Vector2(self.x + self.edge / 2, self.y + self.edge / 2)
         return pos

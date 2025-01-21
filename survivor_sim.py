@@ -9,7 +9,7 @@ from debug import DebugText
 debug_display = DebugText()
 
 DEBUG_MODE = True
-NB_OF_SURVIVORS = 130
+NB_OF_SURVIVORS = 300
 SHOW_DANGER_DISTANCE_LINE = False
 SHOW_FOOD_DISTANCE_LINE = False
 
@@ -176,9 +176,9 @@ def food_detection():
         # Adding Food information to the debug
         debug_display.add("Eaters", eaters)
         debug_display.add("Food full", food.full)
-        debug_display.add("Food quantity", food.quantity)
-        debug_display.add("Food edge", round(food.edge, 2))
-        debug_display.add("Food radius", round(food.scent_field_radius, 2))
+        debug_display.add("Food quantity", f"{food.quantity}/{food.quantity_max}")
+        debug_display.add("Food edge", f"{round(food.edge, 2)}/{food.edge_max}")
+        debug_display.add("Food radius", f"{round(food.scent_field_radius, 2)}/{food.scent_field_radius_max}")
 
         dist = get_distance(SURVIVOR.get_pos(), food.get_pos())
 
@@ -199,9 +199,19 @@ def food_detection():
             else:
                 SURVIVOR.food_rush = False
 
+        if food.quantity <= 0:
+            for eating_survivor in survivors:
+                if eating_survivor.eating or eating_survivor.food_rush:
+                    eating_survivor.stop_eating_now()
+
+            food.find_a_new_place()
+
+            for not_eating_survivor in survivors:
+                not_eating_survivor.food_object = food
+
 def slaughterhouse(survivors_to_remove: list[Survivor]):
     """
-    Survivors who have to die reach their destiny
+    The place where Survivors who must die join their destiny.
 
     Args:
         survivors_to_remove: list of Survivors to be deleted.
