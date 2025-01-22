@@ -1,6 +1,5 @@
 from pygame_options import pygame
 from pygame.math import Vector2
-import random # Imported from other modules
 import numpy as np # Imported from other modules
 
 def get_distance(p1: Vector2, p2: Vector2) -> float:
@@ -61,4 +60,4 @@ def percent(partial_value, total_value) -> int:
         int: Percentage in integer values
     """
     res = (partial_value/total_value) * 100
-    return int(res)
+    return round(res, 2)

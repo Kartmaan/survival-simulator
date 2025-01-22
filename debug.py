@@ -1,9 +1,43 @@
+import logging
 from pygame_options import pygame, screen
+from utils import current_time
 from style import colors
 
 HEIGHT = screen.height
+log_file_name = "logging.log"
+logging_level_terminal = logging.ERROR # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
-class DebugText:
+def logging_config():
+    """
+    Creates a Logger object that can be called by other project files.
+
+    Logs of all levels are saved in the 'logging.log' file, but only those of WARNING level or higher are displayed
+    on the terminal.
+    """
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG) # All levels
+
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    # All levels are saved in the file
+    # The log file is overwritten each time the program is launched.
+    file_handler = logging.FileHandler(log_file_name, mode='w')
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+
+    # Only logs of WARNING level or higher are displayed on the terminal.
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging_level_terminal)
+    stream_handler.setFormatter(formatter)
+
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+
+    return logger
+
+logger = logging_config()
+
+class DebugOnScreen:
     """
     Adds debug data and displays it on screen.
     """
@@ -18,9 +52,35 @@ class DebugText:
         self.offset = 20
         self.size_height_ratio = 1.3
         self.font = pygame.font.SysFont(self.font_name, self.font_size)
+        self.debug_timers = {}
 
     def __len__(self):
         return len(self.debug_txt)
+
+    def timer(self, timer_name: str, duration: float) -> bool:
+        """Checks if a timer has expired.
+
+        This timer is used to prevent certain logger from being displayed too frequently.
+
+        Args:
+            timer_name (str): Timer name.
+            duration (float): Desired duration in seconds.
+
+        Returns:
+            bool: True if time is up, False otherwise.
+        """
+        now = current_time()
+
+        if timer_name not in self.debug_timers:
+            self.debug_timers[timer_name] = now
+            return False
+
+        elapsed_time = now - self.debug_timers[timer_name]
+        if elapsed_time >= duration:
+            self.debug_timers[timer_name] = now
+            return True
+
+        return False
 
     def add(self, title: str, value):
         """

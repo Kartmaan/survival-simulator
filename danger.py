@@ -74,7 +74,7 @@ class Danger:
 
         return False
 
-    # TODO: Cooldown for attack ?
+    # TODO: Cooldown for attack
     def attack(self, target_pos: Vector2):
         """
         Triggering the attack animation against a Survivor.

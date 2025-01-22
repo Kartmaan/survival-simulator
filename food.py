@@ -1,8 +1,10 @@
 from pygame_options import pygame, screen
-from utils import random, Vector2, current_time, get_distance
+from utils import np, Vector2, current_time, get_distance
 from style import colors
-#from survivor import Survivor
 from danger import Danger
+import logging
+
+logger = logging.getLogger("debug")
 
 SHOW_SCENT_FIELD = True
 
@@ -42,12 +44,13 @@ class Food:
 
         # Time management
         self.food_timers = {}
+        self.time_to_respawn = 5
 
         # States
         self.full = False
 
         # Energy
-        self.quantity_max = 1000
+        self.quantity_max = 500
         self.quantity = self.quantity_max
         self.energy_bonus = 1
         self.max_eaters = 10
@@ -85,6 +88,8 @@ class Food:
     def find_a_new_place(self):
         """
         Find a new place for Food.
+
+        The Danger position is used to ensure that the new coordinates are far enough away from it.
         """
         width = screen.width
         height = screen.height
@@ -94,18 +99,20 @@ class Food:
         min_distance_from_danger = width / 4
         far_enough = False
 
-        x = random.randint(int(limit_edge), int(width - limit_edge))
-        y = random.randint(int(limit_edge), int(height - limit_edge))
+        # Naive attempt
+        x = np.random.randint(int(limit_edge), int(width - limit_edge))
+        y = np.random.randint(int(limit_edge), int(height - limit_edge))
 
         distance = get_distance(Vector2(x, y), danger_pos)
 
         if distance < min_distance_from_danger:
             while not far_enough:
-                x = random.randint(int(limit_edge), int(width - limit_edge))
-                y = random.randint(int(limit_edge), int(height - limit_edge))
+                x = np.random.randint(int(limit_edge), int(width - limit_edge))
+                y = np.random.randint(int(limit_edge), int(height - limit_edge))
                 distance = get_distance(Vector2(x, y), danger_pos)
 
                 if distance < min_distance_from_danger:
+                    logger.warning("Food respawn : Food too close from Danger avoided")
                     continue
                 else:
                     far_enough = True
@@ -118,6 +125,8 @@ class Food:
         self.scent_field_radius = self.scent_field_radius_max
         self.quantity = self.quantity_max
         self.full = False
+
+        logger.info(f"Food respawn at {self.pos}")
 
     def adjust_edge(self):
         """

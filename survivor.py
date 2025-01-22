@@ -17,6 +17,9 @@ class Survivor:
     - A Survivor with a critical energy threshold consumes food more quickly.
     - If a Survivor's energy reaches a critical threshold, its speed is reduced and its sensory field gradually narrows.
     - If energy reaches zero, the Survivor stops and dies.
+    TODO:
+     - Make each Survivor unique in some way. The ultimate goal would be to be able to bet on the survival of one of
+     them.
     """
 
     def __init__(self, x, y):
@@ -245,17 +248,19 @@ class Survivor:
         elif self.y - self.survivor_radius > HEIGHT:
             self.y = -self.survivor_radius
 
-    def stop_eating_now(self):
+    def appetite_suppressant_pill(self):
         """
-        Ends Survivor eating mode.
+        Momentarily stops Survivor's attraction to Food.
 
-        Its 'able_to_eat' state is also set to False, which will prevent it from eating again for the time defined by
+        Its 'able_to_eat' state is set to False, which will prevent it from eating again for the time defined by
         self.eating_cooldown. This method prevents the Survivor from getting stuck in eating mode when the amount of
-        Food drops to zero or when Food respawns somewhere else.
+        Food drops to zero or when Food respawns somewhere else. This is also useful for regulating rushes to avoid
+        excess eaters (see 'food_detection' function in main).
         """
         self.eating = False
         self.food_rush = False
         self.able_to_eat = False
+        self.survivor_timers["eating_cooldown"] = current_time()
 
     def move(self) -> bool:
         """Moves the Survivor in different modes:
@@ -381,13 +386,15 @@ class Survivor:
             if self.timer("energy_bonus", bonus_frequency):
                 self.energy += self.food_object.energy_bonus
 
+                # There's still food to eat.
                 if self.food_object.quantity > 0:
                     self.food_object.quantity -= self.food_object.energy_bonus
                     self.food_object.adjust_edge()
+                # No more food to eat.
                 else:
                     #self.food_object.all_survivors = []
                     #self.food_object.find_a_new_place()
-                    self.stop_eating_now()
+                    self.appetite_suppressant_pill()
 
             # If the Survivor has recovered enough energy, he stops eating. Its 'able_to_eat' state is set False
             # to start the cooldown (in the main loop) determining when it will be able to eat again.

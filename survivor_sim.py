@@ -1,26 +1,31 @@
 from pygame_options import pygame, screen, FPS, WIDTH, HEIGHT
-from utils import random, get_distance, Vector2, format_time, percent, np
+from debug import DebugOnScreen
+import logging
+from utils import np, get_distance, Vector2, format_time, percent
 from style import colors
 from survivor import Survivor
 from danger import Danger
 from food import Food
-from debug import DebugText
 
-debug_display = DebugText()
+debug_on_screen = DebugOnScreen()
+logger = logging.getLogger("debug")
 
-DEBUG_MODE = True
-NB_OF_SURVIVORS = 300
+ON_SCREEN_DEBUG = True
+NB_OF_SURVIVORS = 200
 SHOW_DANGER_DISTANCE_LINE = False
 SHOW_FOOD_DISTANCE_LINE = False
 
 nb_of_death = 0
 
 danger_zero = Danger(0, 0)  # Danger model (not displayed)
-danger = Danger(random.randint(danger_zero.edge*3, WIDTH - danger_zero.edge*3),
-                random.randint(danger_zero.edge*3, HEIGHT - danger_zero.edge*3))
+danger = Danger(np.random.randint(danger_zero.edge*3, WIDTH - danger_zero.edge*3),
+                np.random.randint(danger_zero.edge*3, HEIGHT - danger_zero.edge*3))
 
 survivor_zero = Survivor(0, 0)  # Survivor model (not displayed)
 survivors: list[Survivor] = []  # Contains all generated Survivor
+
+logger.info(f"Number of survivors : {NB_OF_SURVIVORS}")
+logger.info(f"Energy max : {survivor_zero.energy_default}")
 
 # - - - - - - - - - - FOOD CREATION - - - - - - - - - -
 # We make sure that the coordinates generated for Food are far enough away from Danger.
@@ -31,18 +36,20 @@ scent_radius = food_zero.scent_field_radius
 limit_edge = food_edge + (scent_radius * 2)
 min_distance_from_danger = WIDTH / 4
 
-x = random.randint(int(limit_edge), int(WIDTH - limit_edge))
-y = random.randint(int(limit_edge), int(HEIGHT - limit_edge))
+# Naive attempt
+x = np.random.randint(int(limit_edge), int(WIDTH - limit_edge))
+y = np.random.randint(int(limit_edge), int(HEIGHT - limit_edge))
 
 distance = get_distance(Vector2(x, y), danger.get_pos())
 far_enough_from_danger = False
 
 if distance < min_distance_from_danger:
     while not far_enough_from_danger:
-        x = random.randint(limit_edge, WIDTH - limit_edge)
-        y = random.randint(limit_edge, HEIGHT - limit_edge)
+        x = np.random.randint(limit_edge, WIDTH - limit_edge)
+        y = np.random.randint(limit_edge, HEIGHT - limit_edge)
         distance = get_distance(Vector2(x, y), danger.get_pos())
         if distance < min_distance_from_danger:
+            logger.warning("Food generation : Food too close from Danger avoided")
             continue
         else:
             far_enough_from_danger = True
@@ -50,29 +57,32 @@ if distance < min_distance_from_danger:
 food = Food(x, y)
 
 # - - - - - - - - - - SURVIVORS CREATION - - - - - - - - - -
-# We make sure that the coordinates generated for each Survivor are far enough away from Danger and Food.
+# We make sure that the coordinates generated for each Survivor are far enough away from Danger and from the edges.
+# The distance to Food is not verified, as Survivors are not immediately hungry.
 for _ in range(NB_OF_SURVIVORS):
-    radius = survivor_zero.sensorial_radius
-    limit_edge = survivor_zero.sensorial_radius
-    min_distance_from_danger = radius + danger.edge
-    min_distance_from_food = radius + food.scent_field_radius
+    survivor_sensorial_radius = survivor_zero.sensorial_radius
+    limit_edge = survivor_zero.sensorial_radius * 1.5
+    min_distance_from_danger = survivor_sensorial_radius + danger.edge * 4
 
-    # The Survivor's coordinates are generated in such a way that the
-    # Danger isn't in his sensory field and so that it's not too close
-    # to the edge of the surface.
-    far_enough_from_danger_and_food = False
-    while not far_enough_from_danger_and_food:
-        x = random.randint(limit_edge, WIDTH - limit_edge)
-        y = random.randint(limit_edge, HEIGHT - limit_edge)
+    # Naive attempt
+    x = np.random.randint(limit_edge, WIDTH - limit_edge)
+    y = np.random.randint(limit_edge, HEIGHT - limit_edge)
 
-        distance_from_danger = get_distance(Vector2(x, y), danger.get_pos())
-        distance_from_food = get_distance(Vector2(x, y), food.get_pos())
+    distance_from_danger = get_distance(Vector2(x, y), danger.get_pos())
+    far_enough_from_danger = False
 
-        if distance_from_danger <= min_distance_from_danger and distance_from_food <= min_distance_from_food:
-            # print("TOO CLOSE AVOIDED")
-            continue
-        else:
-            far_enough_from_danger_and_food = True
+    if distance_from_danger < min_distance_from_danger:
+        while not far_enough_from_danger:
+            x = np.random.randint(limit_edge, WIDTH - limit_edge)
+            y = np.random.randint(limit_edge, HEIGHT - limit_edge)
+
+            distance_from_danger = get_distance(Vector2(x, y), danger.get_pos())
+
+            if distance_from_danger <= min_distance_from_danger:
+                logger.warning("Survivors generation : Survivor too close from danger avoided")
+                continue
+            else:
+                far_enough_from_danger = True
 
     survivor = Survivor(x, y)
     survivors.append(survivor)
@@ -128,15 +138,15 @@ def follow_detection():
                     if (get_distance(SURVIVOR.get_pos(), other_survivor.get_pos()) <
                             (SURVIVOR.sensorial_radius + other_survivor.sensorial_radius)):
                         SURVIVOR.in_follow = True
-                        # The Survivor in_danger transmits his escape vector to the other Survivors in his
-                        # sensory field.
+                        # The Survivor in_danger transmits his escape vector to the other Survivors in his sensory
+                        # field.
                         SURVIVOR.dx = other_survivor.dx
                         SURVIVOR.dy = other_survivor.dy
                         break  # Another Survivor in danger ?
 
 def food_detection():
     """
-    Determines whether the Survivor has detected the Food.
+    Determines whether the Survivor has detected the Food and is authorized to begin his rush towards it.
 
     Several conditions must be met for a Survivor to detect Food :
     - its energy level is less than or equal to its 'energy_hungry' threshold
@@ -147,6 +157,7 @@ def food_detection():
     - it's able to eat (not in eating_cooldown)
     - it's not immobilized
     - Food isn't full
+    - Will not be a surplus eater on Food (see Rush Regulator section)
     """
     for SURVIVOR in survivors:
         conditions_to_detect_food = [SURVIVOR.energy <= SURVIVOR.energy_hungry, not SURVIVOR.in_danger,
@@ -168,17 +179,68 @@ def food_detection():
             if hungry_survivor.food_rush:
                 in_rush += 1
 
+        # Food becomes full if the maximum number of eaters is reached
         if eaters >= food.max_eaters or in_rush >= food.max_eaters:
             food.full = True
         else:
             food.full = False
 
+        # - - - - RUSH REGULATOR
+        # When the number of eaters is below the maximum (food.max_eaters), and several Survivors are in 'food_rush',
+        # each of them rightly considers that Food is not yet full. But when all these Survivors finish their rush,
+        # the maximum number of eaters may finally be exceeded. To avoid this, all Survivors in 'food_rush' mode who
+        # could cause an excess of eaters are identified, and only one or more of them will be randomly selected so as
+        # not to exceed the maximum number of eaters.
+        if in_rush > 0:
+            # The sum of Survivors eating and those in a rush to eat exceeds food.max_eaters. Regulation is needed.
+            if eaters + in_rush > food.max_eaters:
+                # Reporting regulation to logger.
+                if debug_on_screen.timer("rush_regulation", 0.2):
+                    logger.warning(f"Rush regulation : Eaters: {eaters}/{food.max_eaters}, In rush : {in_rush}")
+
+                survivors_in_rush: list[Survivor] = [] # All Survivors in rush mode
+                survivors_not_able_to_rush: list[Survivor] = [] # Survivors who won't be able to rush
+                nb_of_survivors_able_to_rush = 0
+                nb_of_survivors_not_able_to_rush = 0
+
+                # Identifying Survivors in rush.
+                for rushing_survivor in survivors:
+                    if rushing_survivor.food_rush:
+                        survivors_in_rush.append(rushing_survivor)
+
+                # There's still room to eat
+                if eaters < food.max_eaters:
+                    # Calculating the number of Survivors still able to join the feast.
+                    nb_of_survivors_able_to_rush = food.max_eaters - eaters
+
+                    # There are more Survivors in rush mode than there are places to eat.
+                    if len(survivors_in_rush) > nb_of_survivors_able_to_rush:
+                        # Calculating the number of Survivors who will not be able to rush
+                        nb_of_survivors_not_able_to_rush = len(survivors_in_rush) - nb_of_survivors_able_to_rush
+
+                        # Among the Survivors currently in rush, we randomly select those who will not be able to rush.
+                        # These randomly selected Survivors are contained in a dedicated list.
+                        survivors_not_able_to_rush = np.random.choice(survivors_in_rush,
+                                                                      nb_of_survivors_not_able_to_rush, replace=False)
+
+                        # The 'appetite_suppressant_pill' method of the designated Survivors is called, which, among
+                        # other things, sets their 'able_to_eat' status to False, a discriminating factor for detecting
+                        # Food.
+                        for unlucky_survivor in survivors_not_able_to_rush:
+                            unlucky_survivor.appetite_suppressant_pill()
+
+        # Notify the logger if the maximum number of eaters is exceeded.
+        if eaters > food.max_eaters:
+            if debug_on_screen.timer("eaters_exceeding", 2):
+                logger.critical(f"Max eaters exceeding : {eaters}/{food.max_eaters}")
+
         # Adding Food information to the debug
-        debug_display.add("Eaters", eaters)
-        debug_display.add("Food full", food.full)
-        debug_display.add("Food quantity", f"{food.quantity}/{food.quantity_max}")
-        debug_display.add("Food edge", f"{round(food.edge, 2)}/{food.edge_max}")
-        debug_display.add("Food radius", f"{round(food.scent_field_radius, 2)}/{food.scent_field_radius_max}")
+        debug_on_screen.add("Eaters", eaters)
+        debug_on_screen.add("Food full", food.full)
+        debug_on_screen.add("Food quantity", f"{food.quantity}/{food.quantity_max}")
+        debug_on_screen.add("Food edge", f"{round(food.edge, 2)}/{food.edge_max}")
+        debug_on_screen.add("Food radius", f"{round(food.scent_field_radius, 2)}/"
+                                           f"{food.scent_field_radius_max}")
 
         dist = get_distance(SURVIVOR.get_pos(), food.get_pos())
 
@@ -199,13 +261,19 @@ def food_detection():
             else:
                 SURVIVOR.food_rush = False
 
+        # The quantity of Food is at zero and must disappear to reappear elsewhere.
         if food.quantity <= 0:
+            # TODO: Cooldown for respawn
+            #food.food_timers["time_to_respawn"] = current_time()
+
+            # All Survivors who are eating stop eating, and those in a rush to eat cancel their action.
             for eating_survivor in survivors:
                 if eating_survivor.eating or eating_survivor.food_rush:
-                    eating_survivor.stop_eating_now()
+                    eating_survivor.appetite_suppressant_pill()
 
             food.find_a_new_place()
 
+            # New Food states provided to all Survivors.
             for not_eating_survivor in survivors:
                 not_eating_survivor.food_object = food
 
@@ -218,14 +286,14 @@ def slaughterhouse(survivors_to_remove: list[Survivor]):
     """
     global nb_of_death
 
-    for SURVIVOR in survivors_to_remove:
-        survivors.remove(SURVIVOR)
+    for poor_survivor in survivors_to_remove:
+        survivors.remove(poor_survivor)
         nb_of_death += 1
 
     # Counting the living and the dead (debug).
     alive = NB_OF_SURVIVORS - nb_of_death
-    debug_display.add("Survivors alive", f"{alive}/{NB_OF_SURVIVORS} ({percent(alive, NB_OF_SURVIVORS)}%)")
-    debug_display.add("Survivors dead", f"{nb_of_death}/{NB_OF_SURVIVORS} "
+    debug_on_screen.add("Survivors alive", f"{alive}/{NB_OF_SURVIVORS} ({percent(alive, NB_OF_SURVIVORS)}%)")
+    debug_on_screen.add("Survivors dead", f"{nb_of_death}/{NB_OF_SURVIVORS} "
                                         f"({percent(nb_of_death, NB_OF_SURVIVORS)}%)")
 
 # - - - - - - - - - - MAIN LOOP - - - - - - - - - -
@@ -242,12 +310,14 @@ while running:
             running = False
 
     # Surface erasing
+    # TODO: Change the background color according to the average energy of the Survivors, or according to changing
+    #  weather conditions that would have an impact on the attributes of the Survivors and Food?
     screen.fill(colors["BACKGROUND_COLOR"])
 
     # Pygame options added to debug display.
-    debug_display.add("Elapsed time", format_time(pygame.time.get_ticks()))
-    debug_display.add("Window size", f"{WIDTH}x{HEIGHT} px")
-    debug_display.add("FPS", round(clock.get_fps(), 2))
+    debug_on_screen.add("Elapsed time", format_time(pygame.time.get_ticks()))
+    debug_on_screen.add("Window size", f"{WIDTH}x{HEIGHT} px")
+    debug_on_screen.add("FPS", round(clock.get_fps(), 2))
 
     # - - - - - - - - - - DANGER DETECTION - - - - - - - - - -
     danger_detection()
@@ -300,12 +370,12 @@ while running:
         energy_list.append(survivor.energy)
 
     # Adding infos to the debug
-    debug_display.add("In danger", in_danger)
-    debug_display.add("In follow", in_follow)
-    debug_display.add("In critical", in_critical)
-    debug_display.add("Energy mean", round(np.mean(energy_list), 2))
-    debug_display.add("Danger rotation speed", f"{danger.rotation_speed}/{danger.rotation_speed_max}")
-    debug_display.add("Danger rage", danger.rage)
+    debug_on_screen.add("In danger", in_danger)
+    debug_on_screen.add("In follow", in_follow)
+    debug_on_screen.add("In critical", in_critical)
+    debug_on_screen.add("Energy mean", round(np.mean(energy_list), 2))
+    debug_on_screen.add("Danger rotation speed", f"{danger.rotation_speed}/{danger.rotation_speed_max}")
+    debug_on_screen.add("Danger rage", danger.rage)
 
     # - - - - - - - - - - THE SLAUGHTERHOUSE - - - - - - - - - -
     slaughterhouse(to_remove)
@@ -314,8 +384,8 @@ while running:
     danger.show()
     food.show()
 
-    if DEBUG_MODE:
-        debug_display.show()
+    if ON_SCREEN_DEBUG:
+        debug_on_screen.show()
 
     pygame.display.flip()  # Updating display
     clock.tick(FPS)  # FPS Limit
