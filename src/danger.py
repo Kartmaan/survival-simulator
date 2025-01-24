@@ -1,6 +1,9 @@
-from pygame_options import pygame, screen
-from utils import Vector2, current_time
-from style import colors
+from src.pygame_options import pygame, screen
+from src.utils import Vector2, current_time
+from src.style import colors
+import logging
+
+logger = logging.getLogger("src.debug")
 
 class Danger:
     """
@@ -98,6 +101,8 @@ class Danger:
                 if direction.length() > 0:  # Avoid zero vector
                     direction = direction.normalize()
                     self.pos += direction * self.attack_speed
+                else:
+                    logger.critical("Danger attack : null vector")
             else:
                 self.attacking = False
                 self.returning = True

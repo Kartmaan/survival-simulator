@@ -1,10 +1,15 @@
-from pygame_options import pygame, screen, WIDTH, HEIGHT
-from utils import Vector2, current_time, get_distance, np
-from style import colors
-from food import Food
+from src.pygame_options import pygame, screen, WIDTH, HEIGHT
+from src.utils import np, Vector2, current_time, get_distance, name_generator
+from src.style import colors, draw_cross, print_on_screen
+from src.food import Food
+import logging
+
+logger = logging.getLogger("src.debug")
 
 SHOW_SENSORIAL_FIELD = False
 food_zero = Food(0, 0)
+names_list = [] # List of all Survivor names to avoid duplication.
+#_show_podium = False
 
 class Survivor:
     """
@@ -21,7 +26,6 @@ class Survivor:
      - Make each Survivor unique in some way. The ultimate goal would be to be able to bet on the survival of one of
      them.
     """
-
     def __init__(self, x, y):
         # Position / Direction
         self.pos = Vector2(x, y)
@@ -29,6 +33,9 @@ class Survivor:
         self.y = self.pos.y
         self.dx = 0.0
         self.dy = 0.0
+
+        # Identity
+        self.name = self._give_me_a_name()
 
         # Speed
         self.speed_default = 4
@@ -48,7 +55,7 @@ class Survivor:
         self.eating_cooldown = 5
 
         # Size
-        self.survivor_radius_default = 4
+        self.survivor_radius_default = 3
         self.survivor_radius = self.survivor_radius_default
         self.survivor_radius_eating = self.survivor_radius + 3
         self.sensorial_radius_default = self.survivor_radius * 8
@@ -78,6 +85,8 @@ class Survivor:
         self.in_critical = False
         self.immobilized = False
         self.fading = False
+        self.on_podium = False
+        self.is_first = False
 
         # Energy management
         self.energy_default = 60
@@ -94,6 +103,20 @@ class Survivor:
 
         # Food info
         self.food_object: Food = Food(0, 0)
+
+    @staticmethod
+    def _give_me_a_name() -> str:
+        """
+        Find a name for Survivor avoiding duplicates.
+        """
+        while True:
+            name = name_generator()
+            if name not in names_list:
+                names_list.append(name)
+                return name
+            else:
+                logger.info("Name generator : same name avoided.")
+                continue
 
     def timer(self, timer_name: str, duration: float) -> bool:
         """Checks if a timer has expired.
@@ -223,12 +246,6 @@ class Survivor:
             if self.timer("flee", self.flee_duration):
                 self.in_danger = False
 
-    def _immobilization_mode(self):
-        pass
-
-    def _rush_mode(self):
-        pass
-
     def _surface_overrun(self):
         """
         Defines the Survivor's behavior when it exceeds the limits of the surface.
@@ -252,10 +269,10 @@ class Survivor:
         """
         Momentarily stops Survivor's attraction to Food.
 
-        Its 'able_to_eat' state is set to False, which will prevent it from eating again for the time defined by
+        Survivors 'able_to_eat' state is set to False, which will prevent it from eating again for the time defined by
         self.eating_cooldown. This method prevents the Survivor from getting stuck in eating mode when the amount of
         Food drops to zero or when Food respawns somewhere else. This is also useful for regulating rushes to avoid
-        excess eaters (see 'food_detection' function in main).
+        excess eaters (see 'food_detection' function in main at 'rush regulator' section).
         """
         self.eating = False
         self.food_rush = False
@@ -279,10 +296,13 @@ class Survivor:
         conditions_to_search = [not self.in_danger, not self.eating, not self.food_rush]
         conditions_to_rush = [not self.in_danger, not self.in_follow, not self.immobilized, self.able_to_eat]
 
-        # - - - - - - - - - -  IMMOBILIZATION - - - - - - - - - -
+        # -------------------------------------------------------------------
+        #                       IMMOBILIZATION MODE
+        # -------------------------------------------------------------------
+        # This phase occurs when the Survivor has run out of energy, and includes
+        # immobilization and fading, leading to its deletion.
 
-        # The Survivor has run out of energy but has not
-        # yet been immobilized.
+        # The Survivor has run out of energy but has not yet been immobilized.
         if self.energy <= 0 and not self.immobilized:
             self.immobilized = True
             self.survivor_timers["immobilization"] = pygame.time.get_ticks() / 1000.0
@@ -298,8 +318,7 @@ class Survivor:
                 self.survivor_timers["fade"] = current_time()
 
         # Start of fading phase.
-        # The Survivor is immobilized and its color begins
-        # to fade, the last step before it is removed.
+        # The Survivor is immobilized and its color begins to fade, the last step before it is removed.
         if self.fading:
             # Calculating the time elapsed since fading began.
             elapsed_fade_time = current_time() - self.survivor_timers["fade"]
@@ -338,17 +357,30 @@ class Survivor:
         if self.immobilized or self.fading:
             return False
 
-        # - - - - - - - - - - MOVEMENT - - - - - - - - - -
-        # - - - - CRITICAL MODE
-        # The Survivor has reached a critical energy level, his speed is reduced and his sensory field shrinks.
+        # -------------------------------------------------------------------
+        #                            MOVEMENT
+        # -------------------------------------------------------------------
+        # -------------------------------------------------------------------
+        #                         CRITICAL MODE
+        # -------------------------------------------------------------------
+        # The Survivor has reached a critical energy level, his speed is reduced
+        # and his sensory field shrinks.
+
         self._critical_mode()
 
-        # - - - - SEARCH MODE
+        # -------------------------------------------------------------------
+        #                          SEARCH MODE
+        # -------------------------------------------------------------------
         # The Survivor has enough energy to randomly move at normal speed
         # searching for Food.
+
         self._search_mode(conditions_to_search)
 
-        # - - - - FOOD RUSH MODE
+        # -------------------------------------------------------------------
+        #                        FOOD RUSH MODE
+        # -------------------------------------------------------------------
+        # Survivor heads for the food he's detected.
+
         if all(conditions_to_rush):
             # The Survivor heads towards the Food coordinates.
             if self.food_rush and not self.eating:
@@ -374,7 +406,11 @@ class Survivor:
 
                     return False
 
-        # - - - - EATING MODE
+        # -------------------------------------------------------------------
+        #                          EATING MODE
+        # -------------------------------------------------------------------
+        # The Survivor stops near food to consume it and recover energy.
+
         # The rush is over and the Survivor begins to consume the Food.
         if not self.food_rush and self.eating:
             if self.in_critical:
@@ -407,17 +443,35 @@ class Survivor:
                 # No movement as long as the condition is satisfied.
                 return False
 
-        # - - - - DANGER MODE
+        # -------------------------------------------------------------------
+        #                           DANGER MODE
+        # -------------------------------------------------------------------
+        # The Survivor has encountered danger and must flee
+
         self._danger_mode()
 
-        # - - - - SURVIVOR HAS MOVED OUTSIDE THE SURFACE
+        # -------------------------------------------------------------------
+        #               SURVIVOR HAS MOVED OUTSIDE THE SURFACE
+        # -------------------------------------------------------------------
+        # The Survivor has exceeded the limits of the surface.
+
         self._surface_overrun()
 
+        # The function ends here with or without this return, but it's used to specify that the Survivor isn't to
+        # be deleted.
         return False
 
     def show(self):
         """Displays the Survivor on screen according to its status.
         """
+
+        if self.on_podium and not self.is_first and not self.fading:
+            draw_cross(screen, self.get_pos(), self.survivor_radius+4)
+            print_on_screen(screen, pos=self.get_pos() + Vector2(0,10), txt=f"{self.name}", font_size=20)
+        elif self.on_podium and self.is_first and not self.fading:
+            draw_cross(screen, self.get_pos(), self.survivor_radius + 4, width=3)
+            print_on_screen(screen, pos=self.get_pos() + Vector2(0, 10), txt=f"{self.name}", font_size=20)
+
         if self.fading or self.immobilized:
             color = self.color_immobilized
 
@@ -478,4 +532,10 @@ class Survivor:
         return pygame.math.Vector2(pos)
 
     def __repr__(self):
-        return f"Energy : {self.energy}"
+        return f"Name : {self.name}. Energy : {self.energy}"
+
+    def __lt__(self, other):
+        """
+        This special method is used so that the 'sorted' method can be used on a list of Survivor objects.
+        """
+        return self.energy > other.energy

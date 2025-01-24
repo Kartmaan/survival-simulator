@@ -1,12 +1,12 @@
-from pygame_options import pygame, screen
-from utils import np, Vector2, current_time, get_distance
-from style import colors
-from danger import Danger
+from src.pygame_options import pygame, screen
+from src.utils import np, Vector2, current_time, get_distance
+from src.style import colors
+from src.danger import Danger
 import logging
 
-logger = logging.getLogger("debug")
+logger = logging.getLogger("src.debug")
 
-SHOW_SCENT_FIELD = True
+SHOW_SCENT_FIELD = False
 
 class Food:
     """
@@ -18,9 +18,7 @@ class Food:
     - When its energy value reaches zero, it disappears to appear elsewhere.
     - A limited number of Survivors can consume the Food simultaneously.
 
-    Todo:
-     - If the food isn't consumed, it rots.
-     - Different types of Food
+    Todo: Different types of Food
     """
     def __init__(self, x, y):
         # Position
@@ -140,7 +138,6 @@ class Food:
         # Edge reduction
         if self.quantity > 0:
             edge_range = self.edge_max - self.edge_min
-            #quantity_ratio = self.quantity / self.quantity_max
             new_edge = self.edge_min + (edge_range * quantity_ratio)
 
             self.edge = new_edge
@@ -149,7 +146,6 @@ class Food:
 
         # Scent radius reduction
         if self.quantity > 0:
-            #quantity_ratio = self.quantity / self.quantity_max
             radius_range = self.scent_field_radius_max - self.scent_field_radius_min
             new_radius = self.scent_field_radius_min + (radius_range * quantity_ratio)
 

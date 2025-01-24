@@ -1,7 +1,7 @@
 import logging
-from pygame_options import pygame, screen
-from utils import current_time
-from style import colors
+from src.pygame_options import pygame, screen
+from src.utils import current_time, Vector2
+from src.style import colors, print_on_screen
 
 HEIGHT = screen.height
 log_file_name = "logging.log"
@@ -15,6 +15,7 @@ def logging_config():
     on the terminal.
     """
     logger = logging.getLogger(__name__)
+    #print(__name__)
     logger.setLevel(logging.DEBUG) # All levels
 
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
