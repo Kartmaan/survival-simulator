@@ -1,7 +1,9 @@
+import pygame
 import logging
-from src.pygame_options import pygame, screen
-from src.utils import current_time, Vector2
-from src.style import colors, print_on_screen
+
+from src.pygame_options import screen
+from src.utils import current_time
+from src.style import colors
 
 HEIGHT = screen.height
 log_file_name = "logging.log"
@@ -15,7 +17,6 @@ def logging_config():
     on the terminal.
     """
     logger = logging.getLogger(__name__)
-    #print(__name__)
     logger.setLevel(logging.DEBUG) # All levels
 
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -51,7 +52,7 @@ class DebugOnScreen:
         self.font_color = colors["BLACK"]
         self.font_size_max = self.font_size
         self.offset = 20
-        self.size_height_ratio = 1.3
+        self.size_height_ratio = 1.2
         self.font = pygame.font.SysFont(self.font_name, self.font_size)
         self.debug_timers = {}
 
@@ -121,7 +122,7 @@ class DebugOnScreen:
 
     def show(self):
         """
-        Displays all debug entries.
+        Displays all debug entries on screen.
         """
         if not self.enough_space():
             self.adjust_size()

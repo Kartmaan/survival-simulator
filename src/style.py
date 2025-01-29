@@ -1,5 +1,5 @@
-from src.pygame_options import pygame
-from src.utils import Vector2
+import pygame
+from pygame.math import Vector2
 
 colors = {
     "WHITE" : [255, 255, 255],
@@ -9,6 +9,8 @@ colors = {
     "BLUE" : [0, 0, 255],
     "ORANGE" : [255, 128, 0],
 
+    "BACKGROUND_COLOR" : [204, 229, 255],
+
     "SURVIVOR_NORMAL" : [76, 180, 0],
     "SURVIVOR_FOLLOW" : [255, 128, 0],
     "SURVIVOR_CRITICAL" : [34, 55, 89],
@@ -17,10 +19,9 @@ colors = {
 
     "FOOD" : [0, 128, 255],
     "FOOD_FULL" : [96, 96, 96],
+    "FOOD_FINISHED" : [192, 192, 192],
 
-    "DANGER" : [255, 51, 51, 255], # ALPHA
-
-    "BACKGROUND_COLOR" : [204, 229, 255]
+    "DANGER" : [255, 51, 51, 255] # ALPHA
 }
 
 def print_on_screen(screen: pygame.Surface, pos: Vector2 = Vector2(0, 0), ref_pos: str = "center",
@@ -68,3 +69,7 @@ def draw_cross(screen: pygame.Surface, pos: Vector2, branch_length: int, width: 
 
     pygame.draw.line(screen, color, first_branch[0], first_branch[1], width)
     pygame.draw.line(screen, color, second_branch[0], second_branch[1], width)
+
+def draw_square(screen: pygame.Surface, pos: Vector2, edge: int, color: tuple = (0,0,0)):
+    rect = pygame.Rect(pos.x, pos.y, edge, edge)
+    pygame.draw.rect(screen, color, rect)

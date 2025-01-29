@@ -1,14 +1,15 @@
+import numpy as np
+
 from src.debug import DebugOnScreen
 from src.survivor import Survivor
-from src.utils import np, percent
+from src.utils import percent
 
 class Watcher:
     """
     Observes and analyzes the overall state of the simulation. It collects information on the environment, entities
     and other relevant aspects, while making this data available to other project modules. This class does not
     directly modify the state of the simulation, but provides an overview and analysis tools. It serves as a
-    centralized access point for global information, avoiding the need for global variables and promoting more
-    modular, maintainable code.
+    centralized access point for global information, avoiding the need for global variables.
     """
     def __init__(self):
         self.debug_on_screen: DebugOnScreen

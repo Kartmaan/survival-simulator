@@ -1,11 +1,15 @@
-from src.pygame_options import pygame, screen
-from src.utils import np, Vector2, current_time, get_distance
-from src.style import colors
-from src.danger import Danger
 import logging
 
-logger = logging.getLogger("src.debug")
+import pygame
+from pygame.math import Vector2
+import numpy as np
 
+from src.pygame_options import screen
+from src.utils import current_time, get_distance
+from src.style import colors
+from src.danger import Danger
+
+logger = logging.getLogger("src.debug")
 SHOW_SCENT_FIELD = False
 
 class Food:
@@ -15,10 +19,8 @@ class Food:
     - Food has an olfactory field that can be detected by the Survivor's sensory field.
     - It has a quantity value that decreases as it is consumed by Survivors.
     - The olfactory field shrinks as food is consumed.
-    - When its energy value reaches zero, it disappears to appear elsewhere.
+    - When its energy value reaches zero, Food disappears to appear somewhere else after a given time.
     - A limited number of Survivors can consume the Food simultaneously.
-
-    Todo: Different types of Food
     """
     def __init__(self, x, y):
         # Position
@@ -29,6 +31,7 @@ class Food:
         # Colors
         self.color = colors["FOOD"]
         self.color_full = colors["FOOD_FULL"]
+        self.color_finished = colors["FOOD_FINISHED"] # Food completely consumed
         self.color_field = self.color
 
         # Size
@@ -46,10 +49,13 @@ class Food:
 
         # States
         self.full = False
+        self.in_cooldown = False
 
         # Energy
-        self.quantity_max = 500
-        self.quantity = self.quantity_max
+        self.quantity_max = 200
+        self.quantity_min = 30
+        self.init_quantity = self.define_quantity()
+        self.quantity = self.init_quantity
         self.energy_bonus = 1
         self.max_eaters = 10
 
@@ -59,9 +65,8 @@ class Food:
     def timer(self, timer_name: str, duration: float) -> bool:
         """Checks if a timer has expired.
 
-        This allows Food to have its own timers
-        and therefore to have a personalized time management
-        system for each of them.
+        This allows Food to have its own timers and therefore to have a personalized time management system
+        for each of them.
 
         Args:
             timer_name (str): Timer name.
@@ -110,7 +115,7 @@ class Food:
                 distance = get_distance(Vector2(x, y), danger_pos)
 
                 if distance < min_distance_from_danger:
-                    logger.warning("Food respawn : Food too close from Danger avoided")
+                    logger.info("Food respawn : Food too close from Danger avoided")
                     continue
                 else:
                     far_enough = True
@@ -121,10 +126,46 @@ class Food:
 
         self.edge = self.edge_max
         self.scent_field_radius = self.scent_field_radius_max
-        self.quantity = self.quantity_max
+        self.quantity = self.define_quantity()
+        self.init_quantity = self.quantity
         self.full = False
+        self.in_cooldown = False
 
-        logger.info(f"Food respawn at {self.pos}")
+        logger.info(f"Food respawn at {self.pos}. Quantity : {self.quantity}")
+
+    def checker(self, survivors:list):
+        """
+        Checks whether the food has been fully consumed; if so, it respawns after a time determined by
+        self.time_to_respawn.
+        TODO : If Food isn't consumed, it rots.
+        """
+        if self.quantity <= 0:
+            if not self.in_cooldown:
+                self.food_timers["cooldown"] = current_time()
+                self.in_cooldown = True
+
+            for eating_survivor in survivors:
+                if eating_survivor.eating or eating_survivor.food_rush:
+                    eating_survivor.appetite_suppressant_pill()
+
+            if self.timer("cooldown", self.time_to_respawn):
+                self.find_a_new_place()
+                self.in_cooldown = False
+            else:
+                self.in_cooldown = True
+
+            for not_eating_survivor in survivors:
+                not_eating_survivor.food_object = self
+
+        else:
+            self.in_cooldown = False
+
+    def define_quantity(self) -> int:
+        """
+        Set a random food quantity.
+        """
+        random_quantity = np.random.randint(self.quantity_min, self.quantity_max)
+        return random_quantity
 
     def adjust_edge(self):
         """
@@ -162,6 +203,8 @@ class Food:
         # Changes color depending on whether Food is full or not.
         if self.full:
             pygame.draw.rect(screen, tuple(self.color_full), food_rect)
+        elif self.in_cooldown:
+            pygame.draw.rect(screen, tuple(self.color_finished), food_rect)
         else:
             pygame.draw.rect(screen, tuple(self.color), food_rect)
 

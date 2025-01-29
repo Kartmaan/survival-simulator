@@ -1,13 +1,17 @@
-from src.pygame_options import pygame, screen
-from src.utils import Vector2, current_time
-from src.style import colors
 import logging
+
+import pygame
+from pygame.math import Vector2
+
+from src.pygame_options import screen
+from src.utils import current_time
+from src.style import colors
 
 logger = logging.getLogger("src.debug")
 
 class Danger:
     """
-    Attacks Survivors.
+    Entity attacking Survivor for unknown reason.
 
     - The Danger is posted at a random location on the surface.
     - It has a rage level that determines the amount of damage it inflicts.
@@ -34,6 +38,7 @@ class Danger:
         self.nb_of_hits = 0
         self.rage = 0
         self.target = None
+        self.in_cooldown = False
         self.attacking = False
         self.returning = False
 
@@ -45,9 +50,10 @@ class Danger:
         self.angle = 0
 
         # Time management
+        self.attack_cooldown = 2
         self.rage_decreasing_cooldown = 2
-        self.attack_duration = 0.3
-        self.return_duration = 0.4
+        self.attack_duration = 0.2
+        self.return_duration = 0.5
         self.danger_timers = {}
 
     def timer(self, timer_name: str, duration: float) -> bool:

@@ -1,12 +1,17 @@
-from src.pygame_options import pygame, screen, FPS, WIDTH, HEIGHT
-from src.debug import DebugOnScreen
 import logging
-from src.world import Watcher
-from src.utils import np, get_distance, Vector2, format_time
+
+import pygame
+from pygame.math import Vector2
+import numpy as np
+
+from src.pygame_options import screen, FPS, WIDTH, HEIGHT
+from src.debug import DebugOnScreen
+from src.utils import current_time, get_distance, format_time
 from src.style import colors
 from src.survivor import Survivor
 from src.danger import Danger
 from src.food import Food
+from src.world import Watcher
 
 # ===================================================================
 #                          INITIALIZATION
@@ -15,10 +20,13 @@ watcher = Watcher()
 debug_on_screen = DebugOnScreen()
 logger = logging.getLogger("src.debug")
 
-ON_SCREEN_DEBUG = True
-NB_OF_SURVIVORS = 180
+# Displaying information useful for debugging
+ON_SCREEN_DEBUG = False
 SHOW_DANGER_DISTANCE_LINE = False
 SHOW_FOOD_DISTANCE_LINE = False
+
+# Number of Survivors to generate
+NB_OF_SURVIVORS = 200
 
 watcher.set_init_population(NB_OF_SURVIVORS)
 watcher.set_debug(debug_on_screen)
@@ -71,7 +79,6 @@ if distance < min_distance_from_danger:
             far_enough_from_danger = True
 
 food = Food(x, y)
-
 # ===================================================================
 #                        SURVIVORS GENERATION
 # ===================================================================
@@ -112,9 +119,6 @@ for _ in range(NB_OF_SURVIVORS):
 # ===================================================================
 # Useful functions for detecting certain events.
 
-#nb_of_death = 0
-#alive = NB_OF_SURVIVORS
-
 def danger_detection():
     """
     Defines the conditions for a Survivor to detect a Danger.
@@ -136,7 +140,15 @@ def danger_detection():
         if danger_distance < SURVIVOR.sensorial_radius:
             SURVIVOR.in_danger = True
 
-            danger.attack(SURVIVOR.get_pos())
+            # The Survivor establishes a safe distance between himself and the Danger, which he will try not to cross
+            # for the duration of his spatial memory.
+            SURVIVOR.set_security_distance(danger.edge)
+            SURVIVOR.set_spatial_memory_duration()
+            SURVIVOR.deja_vu = True
+            SURVIVOR.survivor_timers["spatial_memory"] = current_time() # Time referential
+
+            # Danger launches his attack on Survivor
+            danger.attack(SURVIVOR.get_pos()) #
 
             # The difference between the Survivor and Danger coordinates is calculated. This gives the horizontal and
             # vertical components of the vector from Danger to Survivor.
@@ -148,6 +160,19 @@ def danger_detection():
             if norm != 0:
                 SURVIVOR.dx = dx / norm
                 SURVIVOR.dy = dy / norm
+
+def deja_vu_detection():
+    """
+    Detects if the Survivor reaches or exceeds its security distance with Danger. If this is the case, the direction
+    vectors of the Survivor are reversed.
+    """
+    for SURVIVOR in survivors:
+        if not SURVIVOR.in_danger and not SURVIVOR.deja_vu_flee:
+            if get_distance(SURVIVOR.get_pos(), danger.get_pos()) < SURVIVOR.security_distance + danger.edge:
+                SURVIVOR.deja_vu_flee = True
+
+                SURVIVOR.dx = -SURVIVOR.dx
+                SURVIVOR.dy = -SURVIVOR.dy
 
 def follow_detection():
     """
@@ -216,23 +241,25 @@ def food_detection():
         # -------------------------------------------------------------------
         #                         RUSH REGULATOR
         # -------------------------------------------------------------------
-        # When the number of eaters is below the maximum (food.max_eaters), and several Survivors are in 'food_rush',
-        # each of them rightly considers that Food is not yet full. But when all these Survivors finish their rush,
-        # the maximum number of eaters may finally be exceeded. To avoid this, all Survivors in 'food_rush' mode who
-        # could cause an excess of eaters are identified, and only one or more of them will be randomly selected so as
-        # not to exceed the maximum number of eaters.
+        # When the number of eaters is below the maximum (food.max_eaters), and
+        # several Survivors are in 'food_rush', each of them rightly considers
+        # that Food is not yet full. But when all these Survivors finish their
+        # rush, the maximum number of eaters may finally be exceeded. To avoid
+        # this, all Survivors in 'food_rush' mode who could cause an excess of
+        # eaters are identified, and only one or more of them will be randomly
+        # selected so as not to exceed the maximum number of eaters.
 
         if in_rush > 0:
             # The sum of Survivors eating and those in a rush to eat exceeds food.max_eaters. Regulation is needed.
             if eaters + in_rush > food.max_eaters:
                 # Reporting regulation to logger.
                 if debug_on_screen.timer("rush_regulator", 0.2):
-                    logger.warning(f"Rush regulation : Eaters: {eaters}/{food.max_eaters}, In rush : {in_rush}")
+                    logger.info(f"Rush regulation : Eaters: {eaters}/{food.max_eaters}, In rush : {in_rush}")
 
                 survivors_in_rush: list[Survivor] = [] # All Survivors in rush mode
-                survivors_not_able_to_rush: list[Survivor] = [] # Survivors who won't be able to rush
-                nb_of_survivors_able_to_rush = 0
-                nb_of_survivors_not_able_to_rush = 0
+                #survivors_not_able_to_rush: list[Survivor] = [] # Survivors who won't be able to rush
+                #nb_of_survivors_able_to_rush = 0
+                #nb_of_survivors_not_able_to_rush = 0
 
                 # Identifying Survivors in rush.
                 for rushing_survivor in survivors:
@@ -268,7 +295,7 @@ def food_detection():
         # Adding Food information to the debug
         debug_on_screen.add("Eaters", eaters)
         debug_on_screen.add("Food full", food.full)
-        debug_on_screen.add("Food quantity", f"{food.quantity}/{food.quantity_max}")
+        debug_on_screen.add("Food quantity", f"{food.quantity}/{food.init_quantity}")
         debug_on_screen.add("Food edge", f"{round(food.edge, 2)}/{food.edge_max}")
         debug_on_screen.add("Food radius", f"{round(food.scent_field_radius, 2)}/"
                                            f"{food.scent_field_radius_max}")
@@ -291,27 +318,6 @@ def food_detection():
             # No detection, no rush.
             else:
                 SURVIVOR.food_rush = False
-
-def food_checker():
-    """
-    Checks the amount of food available and respawns Food if its quantity drops to zero.
-    TODO : If Food isn't consumed, it rots.
-    """
-    # The quantity of Food is at zero and must disappear to reappear elsewhere.
-    if food.quantity <= 0:
-        # TODO: Cooldown for respawn
-        # food.food_timers["time_to_respawn"] = current_time()
-
-        # All Survivors who are eating stop eating, and those in a rush to eat cancel their action.
-        for eating_survivor in survivors:
-            if eating_survivor.eating or eating_survivor.food_rush:
-                eating_survivor.appetite_suppressant_pill()
-
-        food.find_a_new_place()
-
-        # New Food states provided to all Survivors.
-        for not_eating_survivor in survivors:
-            not_eating_survivor.food_object = food
 
 def slaughterhouse(survivors_to_remove: list[Survivor]):
     """
@@ -338,6 +344,7 @@ clock = pygame.time.Clock()
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
+            logger.info(f"Simulation duration : {format_time(pygame.time.get_ticks())}")
             running = False
 
     # Surface erasing
@@ -367,7 +374,10 @@ while running:
     #                        FOOD DETECTION
     # -------------------------------------------------------------------
     food_detection()
-    food_checker()
+    food.checker(survivors)
+    #food_checker()
+
+    deja_vu_detection()
 
     # -------------------------------------------------------------------
     #                      MOVE & SHOW SURVIVORS
@@ -383,7 +393,7 @@ while running:
 
     for survivor in survivors:
         # If the method returns True, the Survivor must be deleted.
-        should_remove = survivor.move()
+        should_remove = survivor.move(danger_pos=danger.get_pos())
 
         if not should_remove:
             survivor.show()
