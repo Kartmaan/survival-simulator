@@ -25,22 +25,27 @@ maximum if it's fleeing danger.
 
 #### Danger management, spatial memory and audacity
 - When the Survivor detects danger in his sensorial field, he flees by increasing his speed and expending more energy.
-- During his escape, the Survivor ignores food
+- During his escape, the Survivor ignores food.
+- If a Survivor not in danger detects another fleeing Survivor in his sensory field, he follows him out of a sense of survival.
+
+##### Spatial memory
 - When encountering danger, the Survivor establishes a **safety distance** from it, and keeps it for a certain period 
 of time, defined by its **spatial memory**, so as not to cross it. 
-- During this period, the Survivor enters 'deja_vu' mode, meaning he has recently come into contact with the danger 
-and still remembers his position.
+- During this period, the Survivor enters '**deja_vu**' mode, meaning it has recently come into contact with the danger 
+and still remembers its position.
 - If this safety distance is reached during the 'deja_vu' mode, the Survivor turns back before the danger reaches 
 its sensory field.
 - The duration of this **spatial memory** is proportional to the Survivor's energy level at the time of contact with the 
 danger. The higher **the energy level, the longer the memory**.
-- Survivor has a random “**audacity**” value that determines the length of this safety distance from the danger. 
+
+##### Audacity
+- Survivor has a random “**audacity**” value that determines the length of this safety distance from the danger but also the duration of its flees. 
 - The lower the audacity value, the greater the safe distance, which, while guaranteeing the Survivor a better chance 
 to not meet the danger, also deprives him of a greater range of movement, potentially preventing him from accessing a 
 food zone.
 - Conversely, a higher audacity value will reduce this safe distance, allowing the Survivor to access a wider area of 
 the surface while ensuring he remains relatively far from danger.
-- If a Survivor detects another fleeing Survivor in his sensory field, he follows him out of a sense of survival.
+- The higher the audacity value, the shorter the duration of the escape, and vice versa.
 - If a Survivor in '**deja_vu**' mode detects another Survivor fleeing, it doesn't follow, as it already knows where 
 the danger is.
 
