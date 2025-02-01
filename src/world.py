@@ -28,7 +28,10 @@ class Watcher:
         # Podium
         self.min_population_for_podium = 10
         self.places_on_podium = 3
+        self.best_survivors: list[Survivor] = []
         self.show_podium = False
+        self.we_have_a_winner = False
+        self.the_winner: Survivor
 
     def population_census(self, population: list[Survivor]):
         """
@@ -95,32 +98,42 @@ class Watcher:
         """
         self.threshold_for_podium()
 
-        if self.living_survivors > 0 and self.show_podium:
-            best_survivors: list[Survivor] = [] # List containing Survivors with the highest energy value
+        if len(population) <= 1:
+            self.we_have_a_winner = True
+
+        if self.living_survivors > 1 and self.show_podium:
+            self.we_have_a_winner = False
+            self.best_survivors: list[Survivor] = [] # List containing Survivors with the highest energy value
             podium_info: list[list] = [] # Info about Survivors on the podium [place, name, energy].
 
             # Establishing the podium.
             # The Survivor class has a special '__lt__' method based on self.energy, enabling the sorted method to be
             # used on instantiated objects in the class.
             for place, good_survivor in enumerate(sorted(population)[:self.places_on_podium]):
-                best_survivors.append(good_survivor)
-                podium_info.append([place+1, good_survivor.name, good_survivor.energy])
+                self.best_survivors.append(good_survivor)
+                podium_info.append([place+1, good_survivor.name, good_survivor.energy,
+                                    round(good_survivor.audacity, 2)])
                 good_survivor.on_podium = True
 
-            best_survivors[0].is_first = True # Marking the first
+            self.best_survivors[0].is_first = True # Marking the first
+
+            # The winning Survivor is retrieved so that it can be analyzed and its statistics displayed in the
+            # simulation's final floating window.
+            self.the_winner = self.best_survivors[0]
 
             # Search for Survivors who are no longer on the podium or in first place.
             for meh_survivor in population:
-                if meh_survivor.on_podium and meh_survivor not in best_survivors:
+                if meh_survivor.on_podium and meh_survivor not in self.best_survivors:
                     meh_survivor.on_podium = False
-                if meh_survivor.is_first and meh_survivor != best_survivors[0]:
+                if meh_survivor.is_first and meh_survivor != self.best_survivors[0]:
                     meh_survivor.is_first = False
 
             # On-screen debug display of Survivor information on the podium
             # If the podium spaces are too large, the debug is not displayed to avoid overloading.
             if isinstance(self.debug_on_screen, DebugOnScreen) and len(podium_info) < 5:
                 for on_podium in podium_info:
-                    self.debug_on_screen.add(f"{on_podium[0]}", f"{on_podium[1]}, {on_podium[2]}")
+                    self.debug_on_screen.add(f"{on_podium[0]}", f"{on_podium[1]}, {on_podium[2]}, "
+                                                                f"{on_podium[3]}")
 
     def threshold_for_podium(self):
         """

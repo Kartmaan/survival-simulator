@@ -216,5 +216,5 @@ class Food:
         """
         Returns Food's coordinates.
         """
-        pos = pygame.math.Vector2(self.x + self.edge / 2, self.y + self.edge / 2)
+        pos = Vector2(self.x + self.edge / 2, self.y + self.edge / 2)
         return pos

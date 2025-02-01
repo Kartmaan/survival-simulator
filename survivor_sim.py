@@ -12,6 +12,7 @@ from src.survivor import Survivor
 from src.danger import Danger
 from src.food import Food
 from src.world import Watcher
+from src.interface import show_winner_window
 
 # ===================================================================
 #                          INITIALIZATION
@@ -26,7 +27,7 @@ SHOW_DANGER_DISTANCE_LINE = False
 SHOW_FOOD_DISTANCE_LINE = False
 
 # Number of Survivors to generate
-NB_OF_SURVIVORS = 200
+NB_OF_SURVIVORS = 180
 
 watcher.set_init_population(NB_OF_SURVIVORS)
 watcher.set_debug(debug_on_screen)
@@ -137,8 +138,9 @@ def danger_detection():
 
         # Danger is in the area of Survivor's sensory field. Survivor enters 'in_danger' mode and an escape vector
         # is generated. -- - (danger.edge / 2)
-        if danger_distance < SURVIVOR.sensorial_radius:
+        if danger_distance < SURVIVOR.sensorial_radius and not SURVIVOR.immobilized:
             SURVIVOR.in_danger = True
+            SURVIVOR.nb_of_hits += 1
 
             # The Survivor establishes a safe distance between himself and the Danger, which he will try not to cross
             # for the duration of his spatial memory.
@@ -163,11 +165,13 @@ def danger_detection():
 
 def deja_vu_detection():
     """
-    Detects if the Survivor reaches or exceeds its security distance with Danger. If this is the case, the direction
-    vectors of the Survivor are reversed.
+    When a Survivor is attacked by a Danger, it flees, keeping in mind a security distance around it so as not to cross
+    it again for a set time. This time is marked by the activation of the Survivor's 'self.deja_vu' state. This
+    function checks whether a Survivor in 'deja_vu' mode reaches or exceeds this security distance. If so, the Survivor
+    turns back.
     """
     for SURVIVOR in survivors:
-        if not SURVIVOR.in_danger and not SURVIVOR.deja_vu_flee:
+        if not SURVIVOR.in_danger and not SURVIVOR.deja_vu_flee and SURVIVOR.deja_vu:
             if get_distance(SURVIVOR.get_pos(), danger.get_pos()) < SURVIVOR.security_distance + danger.edge:
                 SURVIVOR.deja_vu_flee = True
 
@@ -179,13 +183,18 @@ def follow_detection():
     Determines whether a Survivor must follow another Survivor in_danger.
 
     If a Survivor detects another Survivor in_danger in its sensory field, the latter transmits its escape vector to
-    the Survivor so that it takes the same direction.
+    the Survivor so that it takes the same direction. When the Survivor is in 'search' mode, this function simply
+    momentarily overwrites the Survivor's 'self.dx' and 'self.dy' values as long as the Survivor is close to a Survivor
+    in danger. It is therefore not a movement mode in its own right, like those defined in Survivor's 'move' method,
+    but a succession of punctual adjustments.
     """
 
     # The Survivor will continue its follow as long as the Survivor being followed is in danger.
+    # Survivors in 'deja_vu' mode still remember the location of the Danger, having already encountered it, so they
+    # don't follow the escape of the Survivor in Danger.
     for SURVIVOR in survivors:
         SURVIVOR.in_follow = False
-        if not SURVIVOR.in_danger:
+        if not SURVIVOR.in_danger and not SURVIVOR.deja_vu:
             for other_survivor in survivors:
                 if other_survivor != SURVIVOR and other_survivor.in_danger:
                     if (get_distance(SURVIVOR.get_pos(), other_survivor.get_pos()) <
@@ -360,6 +369,8 @@ while running:
     # -------------------------------------------------------------------
     #                        DANGER DETECTION
     # -------------------------------------------------------------------
+    # Checks if Survivor is in danger
+
     danger_detection()
 
     debug_on_screen.add("Danger rotation speed", f"{danger.rotation_speed}/{danger.rotation_speed_max}")
@@ -368,14 +379,23 @@ while running:
     # -------------------------------------------------------------------
     #                        FOLLOW DETECTION
     # -------------------------------------------------------------------
+    # Checks if Survivor must follow another Survivor in danger
+
     follow_detection()
 
     # -------------------------------------------------------------------
     #                        FOOD DETECTION
     # -------------------------------------------------------------------
+    # Checks if Survivor has detected Food and if the Food has been consumed
+
     food_detection()
     food.checker(survivors)
-    #food_checker()
+
+    # -------------------------------------------------------------------
+    #                        DEJA VU DETECTION
+    # -------------------------------------------------------------------
+    # Checks if Survivor in 'deja_vu' mode has reached his security distance
+    # from Danger.
 
     deja_vu_detection()
 
@@ -393,7 +413,7 @@ while running:
 
     for survivor in survivors:
         # If the method returns True, the Survivor must be deleted.
-        should_remove = survivor.move(danger_pos=danger.get_pos())
+        should_remove = survivor.move()
 
         if not should_remove:
             survivor.show()
@@ -432,8 +452,18 @@ while running:
     # -------------------------------------------------------------------
     #                             OTHER
     # -------------------------------------------------------------------
-    danger.show()
-    food.show()
+    if not watcher.we_have_a_winner:
+        danger.show()
+        food.show()
+
+    else:
+        if len(survivors) > 0:
+            survivors.clear()
+            #watcher.the_winner.pos = Vector2(1,1)
+            #watcher.the_winner.x = watcher.the_winner.pos.x
+            #watcher.the_winner.y = watcher.the_winner.pos.y
+
+        show_winner_window(watcher.the_winner)
 
     if ON_SCREEN_DEBUG:
         debug_on_screen.show()

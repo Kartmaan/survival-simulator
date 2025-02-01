@@ -182,4 +182,4 @@ class Danger:
             Vector2 : Danger coordinates
         """
         pos = self.pos.x + self.edge // 2, self.pos.y + self.edge // 2
-        return pygame.math.Vector2(pos)
+        return Vector2(pos)

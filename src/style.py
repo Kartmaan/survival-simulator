@@ -21,7 +21,10 @@ colors = {
     "FOOD_FULL" : [96, 96, 96],
     "FOOD_FINISHED" : [192, 192, 192],
 
-    "DANGER" : [255, 51, 51, 255] # ALPHA
+    "DANGER" : [255, 51, 51, 255], # ALPHA
+
+    "INTERFACE" : [176,224,230],
+    "SHOWCASE" : [240,255,240]
 }
 
 def print_on_screen(screen: pygame.Surface, pos: Vector2 = Vector2(0, 0), ref_pos: str = "center",
@@ -71,5 +74,15 @@ def draw_cross(screen: pygame.Surface, pos: Vector2, branch_length: int, width: 
     pygame.draw.line(screen, color, second_branch[0], second_branch[1], width)
 
 def draw_square(screen: pygame.Surface, pos: Vector2, edge: int, color: tuple = (0,0,0)):
+    """
+    Draws a square centered on the given position.
+
+    Args:
+        screen (Surface): Surface on which to draw the square.
+        pos (Vector2): Square coordinates.
+        edge (int): Square side length.
+        color (tuple): Square color.
+    """
     rect = pygame.Rect(pos.x, pos.y, edge, edge)
+    rect.center = pos
     pygame.draw.rect(screen, color, rect)

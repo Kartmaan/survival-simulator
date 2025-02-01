@@ -25,13 +25,13 @@ class Survivor:
     - It has a sensory field that enables it to detect food, danger and other Survivors.
     - When he detects danger, he flees, increasing his speed and losing more energy.
     - When he encounters a Danger, the Survivor establishes a safe distance from it and keeps it for a time.
-    - It has a audacity value that determines the length of this safety distance.
+    - It has an 'audacity' value that determines the length of this safety distance.
     - When it detects another Survivor fleeing, it follows it out of survival instinct.
     - When it detects food and the need arises, it consumes it to increase its energy.
     - A Survivor with a critical energy threshold consumes food more quickly.
     - If a Survivor's energy reaches a critical threshold, its speed is reduced and its sensory field gradually narrows.
     - If energy reaches zero, the Survivor stops and dies.
-    - Survivor has a unique name
+    - Survivor has a unique name.
     """
     def __init__(self, x, y):
         # -------------------------------------------------------------------
@@ -49,6 +49,8 @@ class Survivor:
         # Attributes that make each Survivor unique.
 
         self.name = self._give_me_a_name()
+        self.audacity_max = 10.0
+        self.audacity_min = 1.0
         self.audacity = self._set_audacity()
 
         # -------------------------------------------------------------------
@@ -60,18 +62,26 @@ class Survivor:
         self.speed_food_rush = self.speed + 1
         self.speed_flee = self.speed + 2
         self.speed_flee_critical = self.speed_critical + 2
+        self.speed_showcase = 5
 
         # -------------------------------------------------------------------
         #                         TIME MANAGEMENT
         # -------------------------------------------------------------------
         # All units in seconds
         self.survivor_timers = {}
+
         self.direction_duration_min = 2
         self.direction_duration_max = 4
-        self.flee_duration = 3
+
+        self.flee_duration_max = 4
+        self.flee_duration_min = 0.85
+        self.flee_duration = self._set_flee_duration()
+
         self.deja_vu_flee_duration = 3
+
         self.fade_duration = 5
         self.immobilization_time = 5
+
         self.eating_cooldown = 5
 
         # -------------------------------------------------------------------
@@ -80,6 +90,7 @@ class Survivor:
         self.survivor_radius_default = 3
         self.survivor_radius = self.survivor_radius_default
         self.survivor_radius_eating = self.survivor_radius + 3 # Oscillation
+        self.survivor_radius_showcase = self.survivor_radius_default * 5
         self.sensorial_radius_default = self.survivor_radius * 20
         self.sensorial_radius = self.survivor_radius_default
 
@@ -137,7 +148,7 @@ class Survivor:
         # The Survivor loses more or less energy as he moves, depending on whether he's in danger or not. Conversely,
         # he gains more or less energy when eating, depending on whether he has a critical energy level or not.
 
-        self.energy_default = 80 # Initial and maximum energy
+        self.energy_default = 60 # Initial and maximum energy
         self.energy = self.energy_default # Energy value to be handled
         self.energy_hungry = self.energy_default / 1.5 # Energy value at which the Survivor feels the need to eat
         self.energy_critical = self.energy_default / 4 # Energy threshold considered critical
@@ -165,14 +176,23 @@ class Survivor:
         self.food_object: Food = Food(0, 0)
         self.danger_object: None
 
-    @staticmethod
-    def _set_audacity():
+        # -------------------------------------------------------------------
+        #                           STATISTICS
+        # -------------------------------------------------------------------
+        # TODO : Use these stats for the final winner
+
+        self.nb_of_hits = 0
+        self.nb_of_foods_consumed = 0
+        self.amount_of_energy_lost = 0
+        self.amount_of_energy_recovered = 0
+
+    def _set_audacity(self):
         """
         Sets a random audacity value for Survivor.
 
         This value will directly influence the setting of the 'security_distance' value.
         """
-        audacity_value = np.random.uniform(1.0, 10.0)
+        audacity_value = np.random.uniform(self.audacity_min, self.audacity_max)
         return audacity_value
 
     def set_security_distance(self, danger_edge: int):
@@ -205,6 +225,18 @@ class Survivor:
         memory.
         """
         self.spatial_memory_duration = self.energy * self.spatial_memory_energy_ratio
+
+    def _set_flee_duration(self) -> float:
+        """
+        Defines a flee duration value according to an audacity value. The higher the audacity value, the shorter the
+        flee duration, and vice versa.
+
+        Survivors with the highest audacity values will therefore flee for shorter periods of time, increasing their
+        time spent searching for food.
+        """
+        duration = ((self.audacity_max - self.audacity) / (self.audacity_max - self.audacity_min) *
+                    (self.flee_duration_max - self.flee_duration_min) + self.flee_duration_min)
+        return duration
 
     def _give_me_a_name(self):
         """
@@ -267,7 +299,7 @@ class Survivor:
 
         return False
 
-    def _change_direction(self, danger_pos: Vector2, direction_duration: float):
+    def _change_direction(self):
         """Choosing a random direction by randomly change the values of dx and dy. In the 'move' method, the
         Survivor's x and y values are added to dx and dy respectively, which can be between -1 and 1, to establish the
         direction of the next step. The variation in x and y can therefore be positive or negative.
@@ -298,7 +330,7 @@ class Survivor:
         elif not self.in_critical:
             self.sensorial_radius = self.sensorial_radius_default
 
-    def _search_mode(self, conditions: list[bool], danger_pos: Vector2):
+    def _search_mode(self, conditions: list[bool]):
         """
         Defines the Survivor's behavior when it moves randomly in search of food.
         """
@@ -319,7 +351,7 @@ class Survivor:
             direction_duration = np.random.uniform(self.direction_duration_min, self.direction_duration_max)
             if self.timer("direction", direction_duration):
                 if not self.food_rush and not self.eating:
-                    self._change_direction(danger_pos=danger_pos, direction_duration=direction_duration)
+                    self._change_direction()
 
     def _danger_mode(self):
         """
@@ -360,9 +392,8 @@ class Survivor:
 
     def _surface_overrun(self):
         """
-        Defines the Survivor's behavior when it exceeds the limits of the surface.
-
-        If the Survivor exits on one side of the surface, it exits on the other.
+        Defines the Survivor's behavior when it exceeds the limits of the surface. If the Survivor exits on one side
+        of the surface, it exits on the other.
         """
 
         # Exits from left or right side
@@ -381,14 +412,18 @@ class Survivor:
         """
         Momentarily stops Survivor's attraction to Food.
 
-        Survivors 'able_to_eat' state is set to False, which will prevent it from eating again for the time defined by
-        self.eating_cooldown. This method prevents the Survivor from getting stuck in eating mode when the amount of
-        Food drops to zero or when Food respawns somewhere else. This is also useful for regulating rushes to avoid
-        excess eaters (see 'food_detection' function in main at 'rush regulator' section).
+        Among other things, Survivors 'able_to_eat' state is set to False, which will prevent it from eating again for
+        the time defined by 'self.eating_cooldown'. This method also prevents the Survivor from getting stuck in eating
+        mode when the amount of Food drops to zero or when Food respawns somewhere else. This is also useful for
+        regulating rushes to avoid excess eaters (see 'food_detection' function in main at 'rush regulator' section).
         """
         self.eating = False
         self.food_rush = False
         self.able_to_eat = False
+
+        # Since the 'able_to_eat' state must only remain False for a specified time (via 'self.eating_cooldown'), we
+        # create a timestamp here so that the time elapsed since it was created can be checked in Pygame's main loop
+        # ('food_detection' function).
         self.survivor_timers["eating_cooldown"] = current_time()
 
     @staticmethod
@@ -454,14 +489,19 @@ class Survivor:
 
         return name
 
-    def move(self, danger_pos: Vector2) -> bool:
+    def move(self) -> bool:
         """Moves the Survivor in different modes:
             - Search mode: the Survivor moves randomly across the surface in search of food.
             - Rush mode : Survivor perceives food and rushes towards it.
             - Eating mode : The Survivor no longer moves while he recovers energy.
-            - Escape mode: the Survivor perceives danger in its sensory field, and flees by increasing its speed.
+            - Flee mode: the Survivor perceives danger in its sensory field, and flees by increasing its speed.
+            - Deja_vu flee mode : Survivor turns back to avoid crossing its security distance with Danger
             - Critical mode: the Survivor has reached a critical energy threshold, and its movement speed decreases.
             - Immobilized mode: Survivor has no energy left and can't move anymore.
+
+            Note: The 'follow' mode isn't defined here by a mode in its own right, since the 'follow_detection'
+            function, located in the main Pygame loop, simply momentarily overwrites the Survivor's 'self.dx' and
+            'self.dy' values as long as it is in the proximity of a Survivor in danger.
 
             The method returns Booleans to indicate whether the Survivor should be deleted (True) or not (False).
 
@@ -549,7 +589,7 @@ class Survivor:
         # Checks if the Survivor has enough energy to randomly move at normal speed
         # searching for Food.
 
-        self._search_mode(conditions_to_search, danger_pos=danger_pos)
+        self._search_mode(conditions_to_search)
 
         # -------------------------------------------------------------------
         #                          DEJA VU MODE
@@ -642,6 +682,7 @@ class Survivor:
         # Checks if the Survivor has exceeded the limits of the surface.
 
         self._surface_overrun()
+
         # The function ends here with or without this return, but it's used to specify that the Survivor isn't to
         # be deleted.
         return False
@@ -671,9 +712,11 @@ class Survivor:
             draw_cross(screen, self.get_pos(), self.survivor_radius + 4, width=3)
             print_on_screen(screen, pos=self.get_pos() + Vector2(0, 10), txt=f"{self.name}", font_size=20)
 
+        # Survivor is immobilized and runs out of energy
         if self.fading or self.immobilized:
             color = self.color_immobilized
 
+        # Setting the color of the Survivor according to its state.
         else:
             if self.in_danger:
                 color = self.color_danger
@@ -690,20 +733,25 @@ class Survivor:
             else:
                 color = self.color
 
+        # The Survivor is stopped to consume the food.
         if self.eating:
+            # A Survivor at critical energy level eats faster
             if self.in_critical:
                 bonus_frequency = self.energy_bonus_frequency_critical
             else:
                 bonus_frequency = self.energy_bonus_frequency
 
+            # We oscillate the diameter of its radius at the frequency at which it gains energy.
             if self.timer("eating_oscillation", bonus_frequency):
                 pygame.draw.circle(screen, color, (int(self.x), int(self.y)), self.survivor_radius_eating)
             else:
                 pygame.draw.circle(screen, color, (int(self.x), int(self.y)), self.survivor_radius)
 
+        # Survivor drawing
         else:
             pygame.draw.circle(screen, color, (int(self.x), int(self.y)), self.survivor_radius)
 
+        # Survivor sensory field display for debugging purposes.
         if SHOW_SENSORIAL_FIELD and not self.immobilized:
             if self.in_danger:
                 pygame.draw.circle(screen, self.sensorial_field_color_danger, (int(self.x), int(self.y)),
@@ -721,6 +769,52 @@ class Survivor:
                 pygame.draw.circle(screen, self.sensorial_field_color, (int(self.x), int(self.y)),
                                    self.sensorial_radius, 1)
 
+    def show_on_showcase(self, surface: pygame.Surface, showcase_side_length: float):
+        """
+        Shows the winning Survivor in the floating window at the end of the simulation.
+
+        The size of the Survivor is increased to show it more clearly.
+
+        Args:
+            surface (Surface) : Surface on witch to draw
+            showcase_side_length (float) : Showcase surface side length
+        """
+
+        # The Survivor radius is a fraction of the showcase surface side length.
+        self.survivor_radius_showcase = showcase_side_length * 0.35
+        pygame.draw.circle(surface, colors["GREEN"], (self.x, self.y), self.survivor_radius_showcase)
+
+    def move_on_showcase(self, showcase_side_length: float):
+        """
+        Simplified version of the 'move' method for moving the winning Survivor within its surface on the final
+        simulation window.
+
+        The Survivor moves within a small surface of this window, but instead of crossing the boundaries of the surface,
+        as is the case in the 'move' method, the Survivor bounces into it.
+
+        Args:
+            showcase_side_length (float) : Showcase surface side length
+        """
+        self.x += self.dx * self.speed_showcase
+        self.y += self.dy * self.speed_showcase
+
+        # As the Survivor moves in a fairly small area, we make sure to have direction durations long enough to cause
+        # more bounces on the edges of the surface.
+        direction_duration = np.random.uniform(3.5, 4.25)
+        if self.timer("direction", direction_duration):
+            self._change_direction()
+
+        # Bounces on surface edges
+        if self.x - self.survivor_radius_showcase <= 0 or self.x + self.survivor_radius_showcase >= showcase_side_length:
+            self.dx *= -1
+            self.x = max(self.survivor_radius_showcase,
+                         int(min(self.x, showcase_side_length - self.survivor_radius_showcase)))
+
+        if self.y - self.survivor_radius_showcase <= 0 or self.y + self.survivor_radius_showcase >= showcase_side_length:
+            self.dy *= -1
+            self.y = max(self.survivor_radius_showcase,
+                         int(min(self.y, showcase_side_length - self.survivor_radius_showcase)))
+
     def get_pos(self) -> Vector2:
         """Returns Survivor coordinates.
 
@@ -728,12 +822,15 @@ class Survivor:
             tuple: Survivor coordinates.
         """
         pos = self.x, self.y
-        return pygame.math.Vector2(pos)
+        return Vector2(pos)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """
+        Allows a print to be applied to the instantiated object.
+        """
         return f"Name : {self.name}. Energy : {self.energy}"
 
-    def __lt__(self, other):
+    def __lt__(self, other) -> bool:
         """
         This special method is used so that the 'sorted' method can be used on a list of Survivor objects.
         """
