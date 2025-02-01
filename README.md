@@ -80,3 +80,4 @@ Entity attacking Survivor for unknown reason.
 highlighted. 
 - Their names appear next to them and are marked with a cross.
 - The thickest cross indicates first place on the podium
+- When there's only one Survivor left, it wins, the simulation stops and a floating window is displayed showing a few statistics about it.
