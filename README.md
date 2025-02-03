@@ -1,6 +1,8 @@
 # Survivor simulator
 
-A Pygame simulation in which survivors search for food while facing danger. 
+A Pygame simulation in which survivors search for food while facing danger.
+
+https://github.com/user-attachments/assets/0f96e868-2814-4b10-8ec8-6160105ae6be
 
 ## Entities
 The simulation is based on 3 entities that influence each other, directly or indirectly :
