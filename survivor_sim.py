@@ -11,13 +11,14 @@ from src.style import colors
 from src.survivor import Survivor
 from src.danger import Danger
 from src.food import Food
-from src.world import Watcher
+from src.world import Watcher, Weather
 from src.interface import show_winner_window
 
 # ===================================================================
 #                          INITIALIZATION
 # ===================================================================
 watcher = Watcher()
+weather = Weather()
 debug_on_screen = DebugOnScreen()
 logger = logging.getLogger("src.debug")
 
@@ -31,6 +32,8 @@ NB_OF_SURVIVORS = 180
 
 watcher.set_init_population(NB_OF_SURVIVORS)
 watcher.set_debug(debug_on_screen)
+
+weather.debug_on_screen = debug_on_screen
 
 survivor_zero = Survivor(0, 0)  # Survivor model (not displayed)
 survivors: list[Survivor] = []  # Contains all generated Survivor

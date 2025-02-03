@@ -1,8 +1,10 @@
+from enum import Enum
+
 import numpy as np
 
 from src.debug import DebugOnScreen
 from src.survivor import Survivor
-from src.utils import percent
+from src.utils import percent, current_time
 
 class Watcher:
     """
@@ -180,3 +182,76 @@ class Watcher:
 
         """
         self.debug_on_screen = debug_obj
+
+# <WORK IN PROGRESS>
+# TODO : Climate variation system impacting simulation entities
+class Climate(Enum):
+    """
+    Enumeration of the different climates with, as a value, a list containing :
+    - The average temperature around which to oscillate
+    - Standard deviation
+    """
+    TEMPERATE = [13.0, 5]
+    COLD = [2.0, 5]
+    HOT = [23.0, 5]
+
+
+class Weather:
+    def __init__(self):
+        self.climate_loop: list[Climate] = [Climate.TEMPERATE, Climate.COLD, Climate.TEMPERATE, Climate.HOT]
+        self.current_climate_index: int = 0
+        self.current_climate: Climate = self.climate_loop[self.current_climate_index]
+        self.temperature: float = self.current_climate.value[0]
+
+        self.weather_timers = {}
+        self.temperate_duration = 10
+        self.cold_duration = 5
+        self.hot_duration = 5
+        self.temperature_stability_duration = 0.5
+
+        self.debug_on_screen: DebugOnScreen
+
+    def timer(self, timer_name: str, duration: float) -> bool:
+        """Checks if a timer has expired.
+
+        This allows Weather to have its own timers and therefore to have a personalized time management system
+        for each of them.
+
+        Args:
+            timer_name (str): Timer name.
+            duration (float): Desired duration in seconds.
+
+        Returns:
+            bool: True if time is up, False otherwise.
+        """
+        now = current_time()
+
+        if timer_name not in self.weather_timers:
+            self.weather_timers[timer_name] = now
+            return False
+
+        elapsed_time = now - self.weather_timers[timer_name]
+        if elapsed_time >= duration:
+            self.weather_timers[timer_name] = now
+            return True
+
+        return False
+
+    def set_climate(self):
+        if self.current_climate == Climate.TEMPERATE:
+            pass
+        elif self.current_climate == Climate.COLD:
+            pass
+        elif self.current_climate == Climate.HOT:
+            pass
+
+    def set_temperature(self):
+        if self.timer("temp_stability", self.temperature_stability_duration):
+            current_climate = self.current_climate
+            mean = current_climate.value[0]
+            sd = current_climate.value[1]
+            temperature = np.random.normal(mean, sd)
+
+            self.temperature = temperature
+
+# </WORK IN PROGRESS>

@@ -92,3 +92,10 @@ Entity attacking Survivor for unknown reason.
 highlighted. 
 - Their names appear next to them and are marked with a cross.
 - The thickest cross indicates first place on the podium
+
+## Debug
+- A debug mode is also available to display precise information on the state of the simulation on screen, in real time.
+![Debug on screen](/assets/md_images/debug.png)
+- At the end of each simulation, a `.log` file is also created to analyze the course of the simulation in greater detail 
+and highlight any problems. 
+![Logger](/assets/md_images/logger.png)
