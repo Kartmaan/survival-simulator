@@ -23,17 +23,25 @@ class Danger:
     - When the Danger spends a certain amount of time without attacking, its rage level decreases.
     """
     def __init__(self, x, y):
-        # Position
+        # -------------------------------------------------------------------
+        #                              POSITION
+        # -------------------------------------------------------------------
         self.initial_pos = Vector2(x, y)
         self.pos = self.initial_pos.copy()
 
-        # Colors
+        # -------------------------------------------------------------------
+        #                               COLOR
+        # -------------------------------------------------------------------
         self.color = colors["DANGER"]
 
-        # Size
+        # -------------------------------------------------------------------
+        #                               SIZE
+        # -------------------------------------------------------------------
         self.edge = 20
 
-        # Attack
+        # -------------------------------------------------------------------
+        #                              ATTACK
+        # -------------------------------------------------------------------
         self.damage = 1
         self.nb_of_hits = 0
         self.rage = 0
@@ -42,16 +50,21 @@ class Danger:
         self.attacking = False
         self.returning = False
 
-        # Speed
+        # -------------------------------------------------------------------
+        #                              SPEED
+        # -------------------------------------------------------------------
         self.attack_speed = 7
         self.return_speed = 6
         self.rotation_speed = 0
         self.rotation_speed_max = 30
         self.angle = 0
 
-        # Time management
+        # -------------------------------------------------------------------
+        #                        TIME MANAGEMENT
+        # -------------------------------------------------------------------
         self.attack_cooldown = 2
         self.rage_decreasing_cooldown = 2
+        self.rage_decreasing_cooldown_penalty = 1
         self.attack_duration = 0.2
         self.return_duration = 0.5
         self.danger_timers = {}
@@ -144,7 +157,8 @@ class Danger:
         determined by the attribute self.rage_decreasing_cooldown.
         """
         if "rage_cooldown" in self.danger_timers:
-            if self.timer("rage_cooldown", self.rage_decreasing_cooldown):
+            cooldown = self.rage_decreasing_cooldown * self.rage_decreasing_cooldown_penalty
+            if self.timer("rage_cooldown", cooldown):
                 if self.rotation_speed > 0:
                     self.rotation_speed -= 1
                     self.rage -= 1

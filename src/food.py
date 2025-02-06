@@ -23,18 +23,24 @@ class Food:
     - A limited number of Survivors can consume the Food simultaneously.
     """
     def __init__(self, x, y):
-        # Position
+        # -------------------------------------------------------------------
+        #                             POSITION
+        # -------------------------------------------------------------------
         self.pos = Vector2(x, y)
         self.x = self.pos.x
         self.y = self.pos.y
 
-        # Colors
+        # -------------------------------------------------------------------
+        #                              COLOR
+        # -------------------------------------------------------------------
         self.color = colors["FOOD"]
         self.color_full = colors["FOOD_FULL"]
         self.color_finished = colors["FOOD_FINISHED"] # Food completely consumed
         self.color_field = self.color
 
-        # Size
+        # -------------------------------------------------------------------
+        #                              SIZE
+        # -------------------------------------------------------------------
         self.edge_max = 20
         self.edge_min = 8
         self.edge = self.edge_max
@@ -43,22 +49,38 @@ class Food:
         self.scent_field_radius_min = self.edge * 2
         self.scent_field_radius = self.scent_field_radius_max
 
-        # Time management
+        # -------------------------------------------------------------------
+        #                         TIME MANAGEMENT
+        # -------------------------------------------------------------------
         self.food_timers = {}
         self.time_to_respawn = 5
+        self.time_to_respawn_penalty = 1
+        self.decay_frequency = 0.5
 
-        # States
+        # -------------------------------------------------------------------
+        #                              STATUS
+        # -------------------------------------------------------------------
         self.full = False
         self.in_cooldown = False
 
-        # Energy
+        # -------------------------------------------------------------------
+        #                        QUANTITY MANAGEMENT
+        # -------------------------------------------------------------------
+        self.quantity_penalty = 1
         self.quantity_max = 200
         self.quantity_min = 30
         self.init_quantity = self.define_quantity()
         self.quantity = self.init_quantity
+
         self.energy_bonus = 1
         self.max_eaters = 10
 
+        self.decay_amount = 0.5
+        self.decay_amount_penalty = 1
+
+        # -------------------------------------------------------------------
+        #                           OTHER OBJECTS
+        # ------------------------------------------------------------------
         # Danger info
         self.danger_object: Danger = Danger(0, 0)
 
@@ -133,27 +155,40 @@ class Food:
 
         logger.info(f"Food respawn at {self.pos}. Quantity : {self.quantity}")
 
-    def checker(self, survivors:list):
+    def rat_and_respawn(self, survivors:list):
         """
-        Checks whether the food has been fully consumed; if so, it respawns after a time determined by
-        self.time_to_respawn.
-        TODO : If Food isn't consumed, it rots.
+        Degrades food at regular intervals and respawns it at new coordinates when its quantity reaches zero.
+
+        Args:
+            survivors (list[Survivor]) : List of Survivors who will receive the new state of the Food object after its
+            respawn.
         """
+        # Food spoils at regular intervals, whether it's eaten or not.
+        if self.timer("decay", self.decay_frequency):
+            if self.quantity > 0:
+                self.quantity -= self.decay_amount * self.decay_amount_penalty
+                self.adjust_edge()
+
+        # The food was completely consumed
         if self.quantity <= 0:
             if not self.in_cooldown:
                 self.food_timers["cooldown"] = current_time()
                 self.in_cooldown = True
 
+            # All eating Survivors disengage from the food for a while.
             for eating_survivor in survivors:
                 if eating_survivor.eating or eating_survivor.food_rush:
                     eating_survivor.appetite_suppressant_pill()
 
-            if self.timer("cooldown", self.time_to_respawn):
+            # Cooldown launched for Food respawn
+            cooldown = self.time_to_respawn * self.time_to_respawn_penalty
+            if self.timer("cooldown", cooldown):
                 self.find_a_new_place()
                 self.in_cooldown = False
             else:
                 self.in_cooldown = True
 
+            # The new Food status is sent to all Survivors.
             for not_eating_survivor in survivors:
                 not_eating_survivor.food_object = self
 
@@ -164,7 +199,7 @@ class Food:
         """
         Set a random food quantity.
         """
-        random_quantity = np.random.randint(self.quantity_min, self.quantity_max)
+        random_quantity = np.random.randint(self.quantity_min, self.quantity_max) * self.quantity_penalty
         return random_quantity
 
     def adjust_edge(self):
@@ -176,6 +211,7 @@ class Food:
         minimum values (`self.edge_min` and `self.scent_field_radius_min`).
         """
         quantity_ratio = self.quantity / self.quantity_max
+
         # Edge reduction
         if self.quantity > 0:
             edge_range = self.edge_max - self.edge_min
@@ -209,7 +245,8 @@ class Food:
             pygame.draw.rect(screen, tuple(self.color), food_rect)
 
         if SHOW_SCENT_FIELD:
-            pygame.draw.circle(screen, self.color_field, (self.pos.x + self.edge // 2, self.pos.y + self.edge // 2),
+            pygame.draw.circle(screen, self.color_field,
+                               (self.pos.x + self.edge // 2, self.pos.y + self.edge // 2),
                                self.scent_field_radius, 2)
 
     def get_pos(self) -> Vector2:

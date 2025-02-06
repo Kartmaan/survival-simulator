@@ -2,6 +2,11 @@ import pygame
 from pygame.math import Vector2
 
 colors = {
+    # -------------------------------------------------------------------
+    #                            BASIC COLORS
+    # -------------------------------------------------------------------
+    # Basic colors for basic artists.
+
     "WHITE" : [255, 255, 255],
     "BLACK" : [0, 0, 0],
     "RED" : [255, 0, 0],
@@ -9,7 +14,27 @@ colors = {
     "BLUE" : [0, 0, 255],
     "ORANGE" : [255, 128, 0],
 
-    "BACKGROUND_COLOR" : [204, 229, 255],
+    # -------------------------------------------------------------------
+    #                          CLIMATE COLORS
+    # -------------------------------------------------------------------
+    # These climatic colors are used as fading targets.
+
+    "TEMPERATE" : [182,251,182],
+    "COLD" : [175,238,238],
+    "HOT" : [222,184,135],
+
+    # -------------------------------------------------------------------
+    #                            BACKGROUND
+    # -------------------------------------------------------------------
+    # The RGB values of the background will be modified in runtime for fading climate changes. As the first climate in
+    # the loop is TEMPERATE, its color is the initial background value.
+
+    "BACKGROUND_COLOR" : [182,251,182],
+
+    # -------------------------------------------------------------------
+    #                         SURVIVOR COLORS
+    # -------------------------------------------------------------------
+    # Colors illustrating the different Survivor states.
 
     "SURVIVOR_NORMAL" : [76, 180, 0],
     "SURVIVOR_FOLLOW" : [255, 128, 0],
@@ -17,11 +42,26 @@ colors = {
     "SURVIVOR_NOT_ABLE" : [153, 0, 153], # Not able to eat
     "SURVIVOR_EATING" : [153, 51, 255],
 
+    # -------------------------------------------------------------------
+    #                           FOOD COLORS
+    # -------------------------------------------------------------------
+    # Colors illustrating the different Food states.
+
     "FOOD" : [0, 128, 255],
     "FOOD_FULL" : [96, 96, 96],
     "FOOD_FINISHED" : [192, 192, 192],
 
+    # -------------------------------------------------------------------
+    #                          DANGER COLORS
+    # -------------------------------------------------------------------
+    # The color of Danger rotates on itself and requires a surface with an alpha channel.
+
     "DANGER" : [255, 51, 51, 255], # ALPHA
+
+    # -------------------------------------------------------------------
+    #                        INTERFACE COLORS
+    # -------------------------------------------------------------------
+    # Colors in the final simulation interface.
 
     "INTERFACE" : [176,224,230],
     "SHOWCASE" : [240,255,240]

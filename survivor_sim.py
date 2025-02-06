@@ -7,7 +7,6 @@ import numpy as np
 from src.pygame_options import screen, FPS, WIDTH, HEIGHT
 from src.debug import DebugOnScreen
 from src.utils import current_time, get_distance, format_time
-from src.style import colors
 from src.survivor import Survivor
 from src.danger import Danger
 from src.food import Food
@@ -28,7 +27,7 @@ SHOW_DANGER_DISTANCE_LINE = False
 SHOW_FOOD_DISTANCE_LINE = False
 
 # Number of Survivors to generate
-NB_OF_SURVIVORS = 180
+NB_OF_SURVIVORS = 250
 
 watcher.set_init_population(NB_OF_SURVIVORS)
 watcher.set_debug(debug_on_screen)
@@ -91,8 +90,8 @@ food = Food(x, y)
 # verified, as Survivors are not immediately hungry.
 
 for _ in range(NB_OF_SURVIVORS):
-    survivor_sensorial_radius = survivor_zero.sensorial_radius
-    limit_edge = survivor_zero.sensorial_radius * 1.5
+    survivor_sensorial_radius = survivor_zero.sensory_radius
+    limit_edge = survivor_zero.sensory_radius * 1.5
     min_distance_from_danger = survivor_sensorial_radius + danger.edge * 4
 
     # Naive attempt
@@ -141,7 +140,7 @@ def danger_detection():
 
         # Danger is in the area of Survivor's sensory field. Survivor enters 'in_danger' mode and an escape vector
         # is generated. -- - (danger.edge / 2)
-        if danger_distance < SURVIVOR.sensorial_radius and not SURVIVOR.immobilized:
+        if danger_distance < SURVIVOR.sensory_radius and not SURVIVOR.immobilized:
             SURVIVOR.in_danger = True
             SURVIVOR.nb_of_hits += 1
 
@@ -169,8 +168,11 @@ def danger_detection():
 def deja_vu_detection():
     """
     When a Survivor is attacked by a Danger, it flees, keeping in mind a security distance around it so as not to cross
-    it again for a set time. This time is marked by the activation of the Survivor's 'self.deja_vu' state. This
-    function checks whether a Survivor in 'deja_vu' mode reaches or exceeds this security distance. If so, the Survivor
+    it again for a set time.
+    This time is marked by the activation of the Survivor's 'self.deja_vu' status.
+    This
+    function checks whether a Survivor in 'deja_vu' mode reaches or exceeds this security distance.
+    If so, the Survivor
     turns back.
     """
     for SURVIVOR in survivors:
@@ -201,13 +203,13 @@ def follow_detection():
             for other_survivor in survivors:
                 if other_survivor != SURVIVOR and other_survivor.in_danger:
                     if (get_distance(SURVIVOR.get_pos(), other_survivor.get_pos()) <
-                            (SURVIVOR.sensorial_radius + other_survivor.sensorial_radius)):
+                            (SURVIVOR.sensory_radius + other_survivor.sensory_radius)):
                         SURVIVOR.in_follow = True
                         # The Survivor in_danger transmits his escape vector to the other Survivors in his sensory
                         # field.
                         SURVIVOR.dx = other_survivor.dx
                         SURVIVOR.dy = other_survivor.dy
-                        break  # Another Survivor in danger ?
+                        break  # Another Survivor in danger?
 
 def food_detection():
     """
@@ -307,7 +309,7 @@ def food_detection():
         # Adding Food information to the debug
         debug_on_screen.add("Eaters", eaters)
         debug_on_screen.add("Food full", food.full)
-        debug_on_screen.add("Food quantity", f"{food.quantity}/{food.init_quantity}")
+        debug_on_screen.add("Food quantity", f"{round(food.quantity, 4)}/{food.init_quantity}")
         debug_on_screen.add("Food edge", f"{round(food.edge, 2)}/{food.edge_max}")
         debug_on_screen.add("Food radius", f"{round(food.scent_field_radius, 2)}/"
                                            f"{food.scent_field_radius_max}")
@@ -318,7 +320,7 @@ def food_detection():
             # If the Survivor's sensory field overlaps the Food's olfactory field, then the Survivor has detected
             # the Food. Its 'food_rush' mode is activated to send a signal to the 'move' method so that the Survivor
             # moves in the direction of the Food.
-            if dist < food.scent_field_radius + SURVIVOR.sensorial_radius:
+            if dist < food.scent_field_radius + SURVIVOR.sensory_radius:
                 SURVIVOR.food_rush = True
 
                 # We send some information to Survivor about Food.
@@ -333,8 +335,12 @@ def food_detection():
 
 def slaughterhouse(survivors_to_remove: list[Survivor]):
     """
-    The place where Survivors who must die join their destiny.
-    This is also where the living and the dead are counted.
+    Retrieves the list of Survivors to be deleted.
+
+    The 'move' method of the Survivor class returns a Boolean to determine whether it should be deleted (True) or not
+    (False) (see the 'MOVE & SHOW SURVIVORS' section in the main loop).
+
+    The function is called in the main Pygame loop in the “THE SLAUGHTERHOUSE” section.
 
     Args:
         survivors_to_remove: list of Survivors to be deleted.
@@ -359,15 +365,60 @@ while running:
             logger.info(f"Simulation duration : {format_time(pygame.time.get_ticks())}")
             running = False
 
-    # Surface erasing
-    # TODO: Change the background color according to the average energy of the Survivors, or according to changing
-    #  weather conditions that would have an impact on the attributes of the Survivors and Food ?
-    screen.fill(colors["BACKGROUND_COLOR"])
+    # Changes the fading background color if the climate changes.
+    # It's in this class method that screen.fill takes place
+    weather.fade_background()
 
     # Pygame options added to debug display.
     debug_on_screen.add("Elapsed time", format_time(pygame.time.get_ticks()))
     debug_on_screen.add("Window size", f"{WIDTH}x{HEIGHT} px")
     debug_on_screen.add("FPS", round(clock.get_fps(), 2))
+
+    # -------------------------------------------------------------------
+    #                            WEATHER
+    # -------------------------------------------------------------------
+    # Climate and temperature update.
+
+    # The climate is only updated when more than one Survivor is alive.
+    if not watcher.we_have_a_winner:
+        weather.set_climate()
+        weather.set_temperature()
+
+        # Application of climatic effects on simulation entities.
+        # Application of malus for cold climates.
+        if weather.current_climate.name == "COLD":
+            for frozen_survivor in survivors:
+                frozen_survivor.speed_penalty = weather.cold_speed # Loss of speed
+                frozen_survivor.energy_loss_penalty = weather.cold_energy_loss # Increased energy consumption
+
+            food.quantity_penalty = weather.cold_food_quantity # Less food
+            food.decay_amount_penalty = weather.cold_food_decay # Food spoils more slowly
+            food.time_to_respawn_penalty = weather.cold_food_respawn # Food respawns later
+
+        # Application of malus for hot climates.
+        elif weather.current_climate.name == "HOT":
+            for burned_survivor in survivors:
+                burned_survivor.speed_penalty = weather.hot_speed # Loss of speed
+                burned_survivor.energy_loss_penalty = weather.hot_energy_loss # Increased energy consumption
+
+            food.quantity_penalty = weather.hot_food_quantity # Less food
+            food.decay_amount_penalty = weather.hot_food_decay # Food spoils faster
+            food.time_to_respawn_penalty = weather.hot_food_respawn # Food respawns later
+            danger.rage_decreasing_cooldown_penalty = weather.hot_rage_cooldown # Danger loses its rage faster
+
+        # No penalties in temperate climates.
+        else:
+            for chill_survivor in survivors:
+                chill_survivor.speed_penalty = 1
+                chill_survivor.energy_loss_penalty = 1
+
+            food.quantity_penalty = 1
+            food.decay_amount_penalty = 1
+            food.time_to_respawn_penalty = 1
+            danger.rage_decreasing_cooldown_penalty = 1
+
+    debug_on_screen.add("Current climate", weather.current_climate.name)
+    debug_on_screen.add("Temperature", round(weather.temperature, 2))
 
     # -------------------------------------------------------------------
     #                        DANGER DETECTION
@@ -392,7 +443,7 @@ while running:
     # Checks if Survivor has detected Food and if the Food has been consumed
 
     food_detection()
-    food.checker(survivors)
+    food.rat_and_respawn(survivors)
 
     # -------------------------------------------------------------------
     #                        DEJA VU DETECTION
@@ -405,7 +456,7 @@ while running:
     # -------------------------------------------------------------------
     #                      MOVE & SHOW SURVIVORS
     # -------------------------------------------------------------------
-    # All Survivor states have been updated, and now it's time to call their
+    # All Survivor status has been updated, and now it's time to call their
     # move and show methods.
 
     # Deleting an element from a list during its iteration can lead
@@ -440,7 +491,7 @@ while running:
     #                      POPULATION CENSUS
     # -------------------------------------------------------------------
     # A census of the Survivors population to produce useful statistics
-    # (such as the number of living and dead Survivors, etc.).
+    # (such as the number of livings and dead Survivors, etc.).
 
     watcher.population_census(survivors)
 
@@ -455,19 +506,22 @@ while running:
     # -------------------------------------------------------------------
     #                             OTHER
     # -------------------------------------------------------------------
+
+    # Food and Danger are displayed until a winner is declared (more than one Survivor alive).
     if not watcher.we_have_a_winner:
         danger.show()
         food.show()
 
+    # The winner has been designated and retrieved by the Watcher class, and the contents of the Survivor list can
+    # be deleted.
     else:
         if len(survivors) > 0:
             survivors.clear()
-            #watcher.the_winner.pos = Vector2(1,1)
-            #watcher.the_winner.x = watcher.the_winner.pos.x
-            #watcher.the_winner.y = watcher.the_winner.pos.y
 
+        # Display of the final floating window, highlighting the winner and his statistics.
         show_winner_window(watcher.the_winner)
 
+    # Debug display on screen if enabled.
     if ON_SCREEN_DEBUG:
         debug_on_screen.show()
 

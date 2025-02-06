@@ -23,11 +23,12 @@ maximum if it's fleeing danger.
 - If the Survivor reaches a critical energy threshold, its speed is reduced, as is the size of its sensorial radius.
 - If its energy drops to zero, it comes to a standstill before disappearing shortly afterward.
 - The Survivor can recover energy by finding food.
-- The Survivor's energy recovery speed will be faster if it's in a critical state.
 
-#### Danger management, spatial memory and audacity
+#### Danger management
 - When the Survivor detects danger in his sensorial field, he flees by increasing his speed and expending more energy.
 - During his escape, the Survivor ignores food
+
+**Spatial memory**
 - When encountering danger, the Survivor establishes a **safety distance** from it, and keeps it for a certain period 
 of time, defined by its **spatial memory**, so as not to cross it. 
 - During this period, the Survivor enters 'deja_vu' mode, meaning he has recently come into contact with the danger 
@@ -39,15 +40,27 @@ danger. The higher **the energy level, the longer the memory**.
 
 ![Danger management](/assets/md_images/danger.png)
 
-- Survivor has a random “**audacity**” value that determines the length of this safety distance from the danger. 
+**Audacity**
+- Survivor has a random “**audacity**” value (between 1.0 and 10.0) that determines the length of this safety distance 
+from the danger but also the duration of its flee. 
 - The lower the audacity value, the greater the safe distance, which, while guaranteeing the Survivor a better chance 
 to not meet the danger, also deprives him of a greater range of movement, potentially preventing him from accessing a 
 food zone.
 - Conversely, a higher audacity value will reduce this safe distance, allowing the Survivor to access a wider area of 
 the surface while ensuring he remains relatively far from danger.
+- A high audacity value reduces the duration of the escape, allowing the Survivor to resume his search for food more 
+quickly.
+- Conversely, a low audacity value increases the duration of the escape, which certainly ensures greater distance from 
+danger, but also causes the Survivor to consume more energy during its prolonged escape, during which time its search 
+for food is ignored.
 
 ![Audacity management](/assets/md_images/audacity.png)
 
+> While Survivors start out on an equal footing in terms of their main parameters: same initial energy value, same 
+sensory radius size, same speed, same energy loss value, etc., the audacity value makes it possible to include 
+randomness in their behavior without significantly impacting the imbalance in survival chances. 
+
+**Follow**
 - If a Survivor detects another fleeing Survivor in his sensory field, he follows him out of a sense of survival.
 - If a Survivor in '**deja_vu**' mode detects another Survivor fleeing, it doesn't follow, as it already knows where 
 the danger is.
@@ -56,8 +69,15 @@ the danger is.
 
 #### Food management
 - When the Survivor's energy level drops sufficiently, he starts to feel hungry.
-- When food enters the Survivor's sensory field, when he's hungry and when this food can accommodate a new eater, 
-he heads towards it to consume it.
+- When the scent of food is detected by the Survivor's sensory field, the Survivor only begins to rush under certain 
+conditions :
+  - The Survivor's energy value must be less than or equal to a **hunger** threshold.
+  - The Survivor must be **able to eat**: for example, after eating, the Survivor must not eat again for a period of 
+  time determined by a cooldown.
+  - A vacant place must be available for eating, as the food can only be consumed by a limited number of Survivors.
+  - Survivor must not be in danger or in pursuit of a Survivor in danger.
+  - The Survivor must have an energy value greater than zero. If the Survivor becomes immobilized for lack of energy 
+  while in direct proximity to the food, it will not be saved.
 - It consumes food until its energy level reaches a maximum, or until there is no more food to consume.
 - Its consumption speed will be higher if its energy level is critical.
 
@@ -87,11 +107,50 @@ Entity attacking Survivor for unknown reason.
 - To illustrate its rage level, the Danger has a **rotation speed** proportional to its rage score.
 - When the Danger spends a certain amount of time without attacking, its **rage level decreases**.
 
+## Weather
+The simulation alternates between several climates, each with a different impact on the entities in the simulation.
+
+- The climate loop is as follows: [temperate 🍃, cold ❄, temperate 🍃, hot 🔥]
+
+
+- Cold ❄ and hot 🔥 climates essentially imply malus 🔴 for Survivors, but at least give them an advantage 🟢.
+
+
+- **❄. Impact of cold climate :**
+  - **Survivors**
+    - Move slower 🔴
+    - Lose more energy 🔴
+  - **Food**
+    - Respawn later 🔴
+    - Less quantity 🔴
+    - Slower decay 🟢
+
+
+- **🔥. Impact of hot climate :**
+  - **Survivors**
+    - Move slower 🔴
+    - Lose more energy 🔴
+  - **Food**
+    - Less quantity 🔴
+    - Faster decay 🔴
+    - Respawn later 🔴
+  - **Danger**
+    - Loses rage faster 🟢
+
+
+- **🍃. Impact of temperate climate :**
+  - All simulation parameters are nominal
+
+
+- Each time the climate changes, the background color changes by fading.
+
 ## Podium
 - When the Survivor population becomes sufficiently low, the three Survivors with the highest energy values are 
 highlighted. 
 - Their names appear next to them and are marked with a cross.
-- The thickest cross indicates first place on the podium
+- The thickest cross indicates first place on the podium.
+- When there's only one Survivor left, the simulation stops and a floating window appears, highlighting the winner and 
+- displaying a few statistics about it.
 
 ## Debug
 - A debug mode is also available to display precise information on the state of the simulation on screen, in real time.

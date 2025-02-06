@@ -29,7 +29,8 @@ class Survivor:
     - When it detects another Survivor fleeing, it follows it out of survival instinct.
     - When it detects food and the need arises, it consumes it to increase its energy.
     - A Survivor with a critical energy threshold consumes food more quickly.
-    - If a Survivor's energy reaches a critical threshold, its speed is reduced and its sensory field gradually narrows.
+    - If a Survivor's energy reaches a critical threshold, its speed is reduced,
+    and its sensory field gradually narrows.
     - If energy reaches zero, the Survivor stops and dies.
     - Survivor has a unique name.
     """
@@ -58,6 +59,7 @@ class Survivor:
         # -------------------------------------------------------------------
         self.speed_default = 4
         self.speed = self.speed_default
+        self.speed_penalty = 1
         self.speed_critical = self.speed / 4
         self.speed_food_rush = self.speed + 1
         self.speed_flee = self.speed + 2
@@ -87,12 +89,15 @@ class Survivor:
         # -------------------------------------------------------------------
         #                             SIZES
         # -------------------------------------------------------------------
+        # Survivor radius
         self.survivor_radius_default = 3
         self.survivor_radius = self.survivor_radius_default
         self.survivor_radius_eating = self.survivor_radius + 3 # Oscillation
         self.survivor_radius_showcase = self.survivor_radius_default * 5
-        self.sensorial_radius_default = self.survivor_radius * 20
-        self.sensorial_radius = self.survivor_radius_default
+
+        # Sensory radius
+        self.sensory_radius_default = self.survivor_radius * 20
+        self.sensory_radius = self.survivor_radius_default
 
         # -------------------------------------------------------------------
         #                             COLORS
@@ -119,21 +124,21 @@ class Survivor:
         self.sensorial_field_color_critical = colors["BLACK"]
 
         # -------------------------------------------------------------------
-        #                              STATES
+        #                              STATUS
         # -------------------------------------------------------------------
-        # Food states
+        # Food status
         self.food_rush = False
         self.eating = False
         self.able_to_eat = True
         self.hungry = False
 
-        # Danger states
+        # Danger status
         self.in_danger = False
-        self.deja_vu = False # Work in progress
+        self.deja_vu = False
         self.deja_vu_flee = False
         self.in_follow = False
 
-        # Energy states
+        # Energy status
         self.in_critical = False
         self.immobilized = False
         self.fading = False
@@ -148,14 +153,22 @@ class Survivor:
         # The Survivor loses more or less energy as he moves, depending on whether he's in danger or not. Conversely,
         # he gains more or less energy when eating, depending on whether he has a critical energy level or not.
 
+        # Energy values
         self.energy_default = 60 # Initial and maximum energy
         self.energy = self.energy_default # Energy value to be handled
+
+        # Threshold values
         self.energy_hungry = self.energy_default / 1.5 # Energy value at which the Survivor feels the need to eat
         self.energy_critical = self.energy_default / 4 # Energy threshold considered critical
+
+        # Energy loss
+        self.energy_loss_penalty = 1 # Climatic penalty
         self.energy_loss_normal = 0.5  # Energy loss in search mode
         self.energy_loss_follow = 1  # Energy loss in follow mode
         self.energy_loss_danger = 1.5  # Energy loss in danger mode
         self.energy_loss_frequency = 1  # Energy loss frequency (in seconds)
+
+        # Energy bonus
         self.energy_bonus_frequency = 0.5  # Frequency of energy gain in search mode (in seconds)
         self.energy_bonus_frequency_critical = 0.25 # Frequency of energy gain in critical mode (in seconds)
 
@@ -179,7 +192,7 @@ class Survivor:
         # -------------------------------------------------------------------
         #                           STATISTICS
         # -------------------------------------------------------------------
-        # TODO : Use these stats for the final winner
+        # Stats for the final winner
 
         self.nb_of_hits = 0
         self.nb_of_foods_consumed = 0
@@ -229,7 +242,7 @@ class Survivor:
     def _set_flee_duration(self) -> float:
         """
         Defines a flee duration value according to an audacity value. The higher the audacity value, the shorter the
-        flee duration, and vice versa.
+        escape duration, and vice versa.
 
         Survivors with the highest audacity values will therefore flee for shorter periods of time, increasing their
         time spent searching for food.
@@ -237,6 +250,12 @@ class Survivor:
         duration = ((self.audacity_max - self.audacity) / (self.audacity_max - self.audacity_min) *
                     (self.flee_duration_max - self.flee_duration_min) + self.flee_duration_min)
         return duration
+
+    def _penalty_weighting(self) -> float:
+        """
+        Weights a penalty coefficient with the energy value.
+        """
+        pass
 
     def _give_me_a_name(self):
         """
@@ -252,7 +271,7 @@ class Survivor:
                 continue
 
     def timer(self, timer_name: str, duration: float) -> bool:
-        """Checks if a timer has expired.
+        """ Checks if a timer has expired.
 
         This allows each Survivor to have its own timers
         and therefore to have a personalized time management
@@ -278,7 +297,7 @@ class Survivor:
         # time reference point for calculating durations).
         # The function returns False, as the timer has
         # just been added and therefore cannot have
-        # already elapsed.
+        # elapsed yet.
         if timer_name not in self.survivor_timers:
             self.survivor_timers[timer_name] = now
             return False
@@ -315,36 +334,36 @@ class Survivor:
         # The Survivor has reached a critical energy level, his speed is reduced and his sensory field shrinks.
         if self.energy <= self.energy_critical:
             self.in_critical = True
-            self.speed = self.speed_critical
+            self.speed = self.speed_critical * self.speed_penalty
         # Survivor's energy level is high enough.
         else:
             self.in_critical = False
-            self.speed = self.speed_default
+            self.speed = self.speed_default * self.speed_penalty
 
         # As Survivor's energy level becomes critical, the radius of his sensory field shrinks.
-        if self.in_critical and self.sensorial_radius > self.survivor_radius:
+        if self.in_critical and self.sensory_radius > self.survivor_radius:
             if self.timer("sensorial_radius", 0.5):
-                self.sensorial_radius = max(float(self.survivor_radius),
-                                            (self.energy / self.energy_critical) * self.sensorial_radius_default)
+                self.sensory_radius = max(float(self.survivor_radius),
+                                          (self.energy / self.energy_critical) * self.sensory_radius_default)
 
         elif not self.in_critical:
-            self.sensorial_radius = self.sensorial_radius_default
+            self.sensory_radius = self.sensory_radius_default
 
     def _search_mode(self, conditions: list[bool]):
         """
         Defines the Survivor's behavior when it moves randomly in search of food.
         """
         if all(conditions):
-            self.x += self.dx * self.speed
-            self.y += self.dy * self.speed
+            self.x += self.dx * (self.speed * self.speed_penalty)
+            self.y += self.dy * (self.speed * self.speed_penalty)
 
             # As the Survivor moves, it loses energy.
             # In order to control the frequency of energy loss, puncture is done in a timer.
             if self.timer("energy_loss", self.energy_loss_frequency):
                 if self.in_follow:
-                    self.energy -= self.energy_loss_follow
+                    self.energy -= self.energy_loss_follow * self.energy_loss_penalty
                 else:
-                    self.energy -= self.energy_loss_normal
+                    self.energy -= self.energy_loss_normal * self.energy_loss_penalty
 
             # The change of direction takes place in a timer of random duration, so the Survivor will hold its
             # directions for different lengths of time.
@@ -360,15 +379,15 @@ class Survivor:
         # Survivor is in danger and flees
         if self.in_danger:
             if not self.in_critical:
-                self.x += self.dx * self.speed_flee
-                self.y += self.dy * self.speed_flee
+                self.x += self.dx * (self.speed_flee * self.speed_penalty)
+                self.y += self.dy * (self.speed_flee * self.speed_penalty)
             else:
-                self.x += self.dx * self.speed_flee_critical
-                self.y += self.dy * self.speed_flee_critical
+                self.x += self.dx * (self.speed_flee_critical * self.speed_penalty)
+                self.y += self.dy * ( self.speed_flee_critical * self.speed_penalty)
 
             # Energy loss in danger mode.
             if self.timer("energy_loss", self.energy_loss_frequency):
-                self.energy -= self.energy_loss_danger
+                self.energy -= self.energy_loss_danger * self.energy_loss_penalty
 
             # Flee duration
             if self.timer("flee", self.flee_duration):
@@ -379,12 +398,12 @@ class Survivor:
         Defines the Survivor's behavior when it reaches or exceeds its safe distance with Danger.
         """
         if self.deja_vu_flee:
-            self.x += self.dx * self.speed
-            self.y += self.dy * self.speed
+            self.x += self.dx * (self.speed * self.speed_penalty)
+            self.y += self.dy * (self.speed * self.speed_penalty)
 
             # Energy loss
             if self.timer("energy_loss", self.energy_loss_frequency):
-               self.energy -= self.energy_loss_normal
+               self.energy -= self.energy_loss_normal * self.energy_loss_penalty
 
             # End of flee
             if self.timer("deja_vu_flee", self.deja_vu_flee_duration):
@@ -412,7 +431,7 @@ class Survivor:
         """
         Momentarily stops Survivor's attraction to Food.
 
-        Among other things, Survivors 'able_to_eat' state is set to False, which will prevent it from eating again for
+        Among other things, Survivors 'able_to_eat' status is set to False, which will prevent it from eating again for
         the time defined by 'self.eating_cooldown'. This method also prevents the Survivor from getting stuck in eating
         mode when the amount of Food drops to zero or when Food respawns somewhere else. This is also useful for
         regulating rushes to avoid excess eaters (see 'food_detection' function in main at 'rush regulator' section).
@@ -421,7 +440,7 @@ class Survivor:
         self.food_rush = False
         self.able_to_eat = False
 
-        # Since the 'able_to_eat' state must only remain False for a specified time (via 'self.eating_cooldown'), we
+        # Since the 'able_to_eat' status must only remain False for a specified time (via 'self.eating_cooldown'), we
         # create a timestamp here so that the time elapsed since it was created can be checked in Pygame's main loop
         # ('food_detection' function).
         self.survivor_timers["eating_cooldown"] = current_time()
@@ -617,8 +636,8 @@ class Survivor:
                 self.dx = direction.x
                 self.dy = direction.y
 
-                self.x += self.dx * self.speed_food_rush
-                self.y += self.dy * self.speed_food_rush
+                self.x += self.dx * (self.speed_food_rush * self.speed_penalty)
+                self.y += self.dy * (self.speed_food_rush * self.speed_penalty)
 
                 distance = get_distance(self.get_pos(), self.food_object.pos)
 
@@ -654,11 +673,9 @@ class Survivor:
                     self.food_object.adjust_edge()
                 # No more food to eat.
                 else:
-                    #self.food_object.all_survivors = []
-                    #self.food_object.find_a_new_place()
                     self.appetite_suppressant_pill()
 
-            # If the Survivor has recovered enough energy, he stops eating. Its 'able_to_eat' state is set False
+            # If the Survivor has recovered enough energy, he stops eating. Its 'able_to_eat' status is set False
             # to start the cooldown (in the main loop) determining when it will be able to eat again.
             if self.energy >= self.energy_default:
                 self.hungry = False
@@ -701,7 +718,7 @@ class Survivor:
             pygame.draw.circle(screen, (0,0,0), (int(self.x), int(self.y)),
                                self.security_distance, 2)
             pygame.draw.circle(screen, (250, 0, 0), (int(self.x), int(self.y)),
-                               self.sensorial_radius, 2)
+                               self.sensory_radius, 2)
 
 
         # Highlights Survivors on podium
@@ -716,7 +733,7 @@ class Survivor:
         if self.fading or self.immobilized:
             color = self.color_immobilized
 
-        # Setting the color of the Survivor according to its state.
+        # Setting the color of the Survivor according to its status.
         else:
             if self.in_danger:
                 color = self.color_danger
@@ -755,19 +772,19 @@ class Survivor:
         if SHOW_SENSORIAL_FIELD and not self.immobilized:
             if self.in_danger:
                 pygame.draw.circle(screen, self.sensorial_field_color_danger, (int(self.x), int(self.y)),
-                                   self.sensorial_radius, 3)
+                                   self.sensory_radius, 3)
 
             elif self.in_follow:
                 pygame.draw.circle(screen, self.sensorial_field_color_follow, (int(self.x), int(self.y)),
-                                   self.sensorial_radius, 3)
+                                   self.sensory_radius, 3)
 
             elif self.in_critical:
                 pygame.draw.circle(screen, self.sensorial_field_color_critical, (int(self.x), int(self.y)),
-                                   self.sensorial_radius, 3)
+                                   self.sensory_radius, 3)
 
             else:
                 pygame.draw.circle(screen, self.sensorial_field_color, (int(self.x), int(self.y)),
-                                   self.sensorial_radius, 1)
+                                   self.sensory_radius, 1)
 
     def show_on_showcase(self, surface: pygame.Surface, showcase_side_length: float):
         """
