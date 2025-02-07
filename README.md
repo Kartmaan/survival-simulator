@@ -2,7 +2,9 @@
 
 A Pygame simulation in which survivors search for food while facing danger.
 
-https://github.com/user-attachments/assets/0f96e868-2814-4b10-8ec8-6160105ae6be
+
+https://github.com/user-attachments/assets/1207574a-ad1f-495d-85cc-277536574ba0
+
 
 ## Entities
 The simulation is based on 3 entities that influence each other, directly or indirectly :
