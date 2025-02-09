@@ -190,10 +190,10 @@ class Watcher:
 class Climate(Enum):
     """
     Enumeration of the different climates with, as a value, a list containing :
-    - The average temperature around which to oscillate
-    - Standard deviation
+    - [0]: The average temperature around which to oscillate
+    - [1]: Standard deviation
     """
-    TEMPERATE = [13.0, 5] # Standard climate (nominal parameters)
+    TEMPERATE = [15.0, 3] # Standard climate (nominal parameters)
     COLD = [-20.0, 5] # Extreme climate (penalized parameters)
     HOT = [55.0, 5] # Extreme climate (penalized parameters)
 
@@ -226,8 +226,8 @@ class Weather:
 
         self.temperate_duration = 30
         self.cold_duration = 20
-        self.hot_duration = 20
-        self.temperature_stability_duration = 0.5
+        self.hot_duration = 15
+        self.temperature_refresh_frequency = 0.25
 
         # -------------------------------------------------------------------
         #                              COLORS
@@ -245,12 +245,13 @@ class Weather:
         #                        CLIMATIC PENALTIES
         # -------------------------------------------------------------------
         # Multiplier coefficients for climatic penalties
+        # Temperate climates do not incur a penalty.
 
         # Cold climate penalties
         self.cold_energy_loss = 1.4 # Increased energy consumption
         self.cold_speed = 0.5 # Loss of speed
         self.cold_food_quantity = 0.25 # Less food
-        self.cold_food_respawn = 2 # Food respawns later
+        self.cold_food_respawn = 1.8 # Food respawns later
         self.cold_food_decay = 0.1 # Food spoils more slowly (bonus)
 
         # Hot climate penalties
@@ -258,8 +259,8 @@ class Weather:
         self.hot_speed = 0.7 # Loss of speed
         self.hot_food_decay = 3.14 # Food spoils faster
         self.hot_food_quantity = 0.25 # Less food
-        self.hot_food_respawn = 2.5 # Food respawns later
-        self.hot_rage_cooldown = 0.5 # Danger loses its rage faster (bonus)
+        self.hot_food_respawn = 2.2 # Food respawns later
+        self.hot_rage_cooldown = 0.25 # Danger loses its rage faster (bonus)
 
         # -------------------------------------------------------------------
         #                              STATUS
@@ -340,7 +341,7 @@ class Weather:
         Repeated calls to the function therefore generate a series of temperature values respecting a normal
         distribution.
         """
-        if self.timer("temp_stability", self.temperature_stability_duration):
+        if self.timer("temp_stability", self.temperature_refresh_frequency):
             current_climate = self.current_climate
             mean = current_climate.value[0]
             sd = current_climate.value[1]
@@ -365,7 +366,6 @@ class Weather:
         """
         Starts background color fading if the climate changes.
         """
-
         # Between two fades, we keep the state of the last color.
         if self.fade_start_time is None:
             screen.fill(self.current_color)

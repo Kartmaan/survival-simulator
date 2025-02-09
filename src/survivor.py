@@ -50,9 +50,14 @@ class Survivor:
         # Attributes that make each Survivor unique.
 
         self.name = self._give_me_a_name()
-        self.audacity_max = 10.0
+
         self.audacity_min = 1.0
+        self.audacity_max = 10.0
         self.audacity = self._set_audacity()
+
+        self.resilience_min = 1.0
+        self.resilience_max = 10.0
+        self.resilience = self._set_resilience()
 
         # -------------------------------------------------------------------
         #                              SPEED
@@ -154,12 +159,12 @@ class Survivor:
         # he gains more or less energy when eating, depending on whether he has a critical energy level or not.
 
         # Energy values
-        self.energy_default = 60 # Initial and maximum energy
+        self.energy_default = 120 # Initial and maximum energy
         self.energy = self.energy_default # Energy value to be handled
 
         # Threshold values
         self.energy_hungry = self.energy_default / 1.5 # Energy value at which the Survivor feels the need to eat
-        self.energy_critical = self.energy_default / 4 # Energy threshold considered critical
+        self.energy_critical = self.energy_default / 5 # Energy threshold considered critical
 
         # Energy loss
         self.energy_loss_penalty = 1 # Climatic penalty
@@ -199,11 +204,26 @@ class Survivor:
         self.amount_of_energy_lost = 0
         self.amount_of_energy_recovered = 0
 
-    def _set_audacity(self):
+    def _set_resilience(self) -> float:
+        """
+        Sets a random resilience value to Survivor.
+
+        Returns:
+            float: Resilience value
+        """
+        resilience_value = np.random.uniform(self.resilience_min, self.resilience_max)
+        return resilience_value
+
+    def _set_audacity(self) -> float:
         """
         Sets a random audacity value for Survivor.
 
-        This value will directly influence the setting of the 'security_distance' value.
+        This value will directly influence:
+        - The 'security_distance' value.
+        - The flee duration
+
+        Returns:
+            float : The audacity value
         """
         audacity_value = np.random.uniform(self.audacity_min, self.audacity_max)
         return audacity_value
@@ -251,11 +271,13 @@ class Survivor:
                     (self.flee_duration_max - self.flee_duration_min) + self.flee_duration_min)
         return duration
 
-    def _penalty_weighting(self) -> float:
-        """
-        Weights a penalty coefficient with the energy value.
-        """
-        pass
+    # def _get_weighted_penalty(self) -> float:
+    #     """
+    #     Weights a penalty coefficient with the energy value.
+    #     """
+    #     speed_penalty = self.speed_penalty
+    #     energy_max = self.energy_default
+    #     temperature = 0
 
     def _give_me_a_name(self):
         """

@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 import pygame
 from pygame.math import Vector2
@@ -6,11 +7,11 @@ import numpy as np
 
 from src.pygame_options import screen, FPS, WIDTH, HEIGHT
 from src.debug import DebugOnScreen
-from src.utils import current_time, get_distance, format_time
+from src.utils import current_time, get_distance, format_time, penalty_weighting
 from src.survivor import Survivor
 from src.danger import Danger
 from src.food import Food
-from src.world import Watcher, Weather
+from src.world import Watcher, Weather, Climate
 from src.interface import show_winner_window
 
 # ===================================================================
@@ -122,6 +123,10 @@ for _ in range(NB_OF_SURVIVORS):
 # ===================================================================
 # Useful functions for detecting certain events.
 
+# -------------------------------------------------------------------
+#                       EVENTS DETECTION
+# -------------------------------------------------------------------
+
 def danger_detection():
     """
     Defines the conditions for a Survivor to detect a Danger.
@@ -139,10 +144,12 @@ def danger_detection():
             danger.attack(SURVIVOR.get_pos())
 
         # Danger is in the area of Survivor's sensory field. Survivor enters 'in_danger' mode and an escape vector
-        # is generated. -- - (danger.edge / 2)
+        # is generated.
         if danger_distance < SURVIVOR.sensory_radius and not SURVIVOR.immobilized:
             SURVIVOR.in_danger = True
-            SURVIVOR.nb_of_hits += 1
+            if danger.timer("Damage", danger.attack_cooldown):
+                SURVIVOR.energy -= danger.damage
+                SURVIVOR.nb_of_hits += 1
 
             # The Survivor establishes a safe distance between himself and the Danger, which he will try not to cross
             # for the duration of his spatial memory.
@@ -333,6 +340,10 @@ def food_detection():
             else:
                 SURVIVOR.food_rush = False
 
+# -------------------------------------------------------------------
+#                            TOOLS
+# -------------------------------------------------------------------
+
 def slaughterhouse(survivors_to_remove: list[Survivor]):
     """
     Retrieves the list of Survivors to be deleted.
@@ -348,6 +359,55 @@ def slaughterhouse(survivors_to_remove: list[Survivor]):
 
     for poor_survivor in survivors_to_remove:
         survivors.remove(poor_survivor)
+
+def weighted_speed_penalty(speed_penalty: float, energy: float, mean_climatic_temp: float, temperature: float,
+                           resilience: Optional[float] = None) -> float:
+    """
+    Weights the Survivor's speed penalty multiplier with its energy and resilience values but also the climatic
+    temperature.
+
+    Args:
+        speed_penalty (float): Multiplier to be weighted.
+        energy (float): Current Survivor energy.
+        mean_climatic_temp (float): Mean climatic temperature.
+        temperature (float): Current temperature.
+        resilience (float): Survivor resilience score.
+
+    Returns:
+        float: Weighted multiplier.
+    """
+    energy_max = survivor_zero.energy_default
+    resilience_min = survivor_zero.resilience_min
+    resilience_max = survivor_zero.resilience_max
+
+    weighted_penalty = penalty_weighting(speed_penalty, energy, energy_max, mean_climatic_temp, temperature,
+                                         resilience, [resilience_min, resilience_max],
+                                         inverse_effect=False)
+
+    return weighted_penalty
+
+def weighted_energy_loss_penalty(energy_loss_penalty: float, mean_climatic_temp: float, temperature: float,
+                                 resilience: float) -> float:
+    """
+    Weights the Survivor's energy loss penalty multiplier with its resilience value and the climatic temperature.
+
+    Args:
+        energy_loss_penalty (float): Multiplier to be weighted
+        mean_climatic_temp (float): Mean climatic temperature.
+        temperature (float): Current temperature.
+        resilience (float): Survivor resilience score.
+
+    Returns:
+        float: Weighted multiplier.
+    """
+    resilience_min = survivor_zero.resilience_min
+    resilience_max = survivor_zero.resilience_max
+
+    weighted_penalty = penalty_weighting(energy_loss_penalty, mean_climatic_temperature=mean_climatic_temp,
+                                         temperature=temperature, resilience=resilience,
+                                         resilience_min_max=[resilience_min, resilience_max], inverse_effect=True)
+
+    return weighted_penalty
 
 # ===================================================================
 #                             MAIN LOOP
@@ -384,38 +444,106 @@ while running:
         weather.set_climate()
         weather.set_temperature()
 
+        # -------------------------------------------------------------------
+        #                   CLIMATIC EFFECTS APPLICATION
+        # -------------------------------------------------------------------
         # Application of climatic effects on simulation entities.
+        # Survivors weight the basic climatic malus defined by the Weather class by their energy and resilience values
+        # and also the temperature. Food and Danger, on the other hand, are not weighted, and are therefore subject to
+        # the basic climatic malus defined by the class.
+        # -------------------------------------------------------------------
+        #                           COLD CLIMATE ⛄
+        # -------------------------------------------------------------------
         # Application of malus for cold climates.
         if weather.current_climate.name == "COLD":
             for frozen_survivor in survivors:
-                frozen_survivor.speed_penalty = weather.cold_speed # Loss of speed
-                frozen_survivor.energy_loss_penalty = weather.cold_energy_loss # Increased energy consumption
+                # The speed penalty is weighted by the Survivor's energy, resilience and climatic temperature.
+                frozen_survivor.speed_penalty = weighted_speed_penalty(weather.cold_speed, frozen_survivor.energy,
+                                                                       Climate.COLD.value[0],
+                                                                       weather.temperature,
+                                                                       frozen_survivor.resilience)
 
+                # The energy loss penalty is weighted by the temperature and resilience of the Survivor.
+                frozen_survivor.energy_loss_penalty = weighted_energy_loss_penalty(weather.cold_energy_loss,
+                                                                                   Climate.COLD.value[0],
+                                                                                   weather.temperature,
+                                                                                   frozen_survivor.resilience)
+
+            # Food penalties are not weighted; they are subject to the basic weather penalties defined by the Weather
+            # class.
             food.quantity_penalty = weather.cold_food_quantity # Less food
             food.decay_amount_penalty = weather.cold_food_decay # Food spoils more slowly
             food.time_to_respawn_penalty = weather.cold_food_respawn # Food respawns later
 
+            if len(survivors) > 0:
+                debug_on_screen.add("S1 speed", round(survivors[0].speed, 4))
+                debug_on_screen.add("S1 ELP", round(survivors[0].energy_loss_penalty, 4))
+                debug_on_screen.add("S1 Constitution", round(survivors[0].resilience, 2))
+
+
+        # -------------------------------------------------------------------
+        #                             HOT CLIMATE 🔥
+        # -------------------------------------------------------------------
         # Application of malus for hot climates.
         elif weather.current_climate.name == "HOT":
             for burned_survivor in survivors:
-                burned_survivor.speed_penalty = weather.hot_speed # Loss of speed
-                burned_survivor.energy_loss_penalty = weather.hot_energy_loss # Increased energy consumption
+                # The speed penalty is weighted by the Survivor's energy, resilience and climatic temperature.
+                burned_survivor.speed_penalty = weighted_speed_penalty(weather.hot_speed, burned_survivor.energy,
+                                                                       Climate.HOT.value[0],
+                                                                       weather.temperature,
+                                                                       burned_survivor.resilience)
 
+                # The energy loss penalty is weighted by the temperature and resilience of the Survivor.
+                burned_survivor.energy_loss_penalty = weighted_energy_loss_penalty(weather.hot_energy_loss,
+                                                                                   Climate.HOT.value[0],
+                                                                                   weather.temperature,
+                                                                                   burned_survivor.resilience)
+
+            # Food and Danger penalties are not weighted; they are subject to the basic weather penalties defined by
+            # the Weather class.
             food.quantity_penalty = weather.hot_food_quantity # Less food
             food.decay_amount_penalty = weather.hot_food_decay # Food spoils faster
             food.time_to_respawn_penalty = weather.hot_food_respawn # Food respawns later
             danger.rage_decreasing_cooldown_penalty = weather.hot_rage_cooldown # Danger loses its rage faster
 
-        # No penalties in temperate climates.
+            if len(survivors) > 0:
+                debug_on_screen.add("S1 speed", round(survivors[0].speed, 4))
+                debug_on_screen.add("S1 ELP", round(survivors[0].energy_loss_penalty, 4))
+                debug_on_screen.add("S1 Constitution", round(survivors[0].resilience, 2))
+
+        # -------------------------------------------------------------------
+        #                         TEMPERATE CLIMATE 🍃
+        # -------------------------------------------------------------------
+        # In temperate climates, all penalty values are 1, so variations around nominal values will be minimal.
+
         else:
             for chill_survivor in survivors:
-                chill_survivor.speed_penalty = 1
-                chill_survivor.energy_loss_penalty = 1
+                # With the penalty multiplier at 1, the basic malus is null, and only small variations on speed will
+                # occur depending on the temperature oscillations of the temperate climate and the energy of the
+                # Survivor. All attenuated by its resilience value.
+                chill_survivor.speed_penalty = weighted_speed_penalty(1, chill_survivor.energy,
+                                                                      Climate.TEMPERATE.value[0],
+                                                                      weather.temperature,
+                                                                      chill_survivor.resilience)
 
+                # With the penalty multiplier at 1, the basic malus is zero, and only small variations in the energy
+                # loss penalty will occur according to temperature oscillations in temperate climates. All
+                # mitigated by its resilience value.
+                chill_survivor.energy_loss_penalty = weighted_energy_loss_penalty(1,
+                                                                                  Climate.TEMPERATE.value[0],
+                                                                                  weather.temperature,
+                                                                                  chill_survivor.resilience)
+
+            # No penalties
             food.quantity_penalty = 1
             food.decay_amount_penalty = 1
             food.time_to_respawn_penalty = 1
             danger.rage_decreasing_cooldown_penalty = 1
+
+            if len(survivors) > 0:
+                debug_on_screen.add("S1 speed", round(survivors[0].speed, 4))
+                debug_on_screen.add("S1 ELP", round(survivors[0].energy_loss_penalty, 4))
+                debug_on_screen.add("S1 Constitution", round(survivors[0].resilience, 2))
 
     debug_on_screen.add("Current climate", weather.current_climate.name)
     debug_on_screen.add("Temperature", round(weather.temperature, 2))

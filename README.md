@@ -86,6 +86,25 @@ conditions :
 Beyond these survival mechanics, the Survivor also has a unique, randomly-generated name that allows it to be precisely 
 identified. This name is used to distinguish one Survivor from another during the podium phase (_see below_).
 
+#### Resilience
+- The Survivor has a random resilience value (between 1.0 and 10.0).
+- Resilience is a parameter that influences how a Survivor copes with the negative effects of its environment and 
+especially the climate (see Weather section).
+- The value acts as a mitigating factor for penalties applied to certain dynamic values, such as speed, energy loss, or 
+other statistics influenced by external conditions.
+  - The higher the resilience, the lower the penalties applied to a statistic.
+  - The lower the resilience, the greater the penalties incurred by the entity.
+- The value allows to : 
+  - Reduce the negative impact of extreme environmental conditions (_too low or too high temperatures_) on the 
+  Survivor's speed
+  - Reduce the effect of malus related to Survivor energy loss.
+- Each climate has a basic and fixed penalty multiplier to be applied to certain dynamic values of the Survivor, 
+such as its speed or energy loss value. It's the effect of this multiplier that is attenuated by the Survivor's 
+resilience attribute.
+
+> Resilience introduces additional variability on the simulation (_in addition to the 'audacity' attribute_) 
+depending on the characteristics of each entity and the climate.
+
 ### Food
 Food consumed by Survivors to boost their energy levels.
 
@@ -114,9 +133,26 @@ The simulation alternates between several climates, each with a different impact
 
 - The climate loop is as follows: [temperate 🍃, cold ❄, temperate 🍃, hot 🔥]
 
+![Weather](/assets/md_images/weather.png)
+
 
 - Cold ❄ and hot 🔥 climates essentially imply malus 🔴 for Survivors, but at least give them an advantage 🟢.
+- A temperature is updated periodically, centered around a climatic temperature mean and respecting a given standard 
+deviation.
+- These temperatures have a direct impact on Survivors, with greater or lesser malus depending on the deviation from a 
+universal reference temperature.
+- The simulation defines the basic malus applied to certain dynamic variables for each climate, for example :
+  - cold_seed_penalty = 0.4
+  - hot_speed_penalty = 0.6
+  - temperate_speed_penalty = 1 
+- These penalty multipliers are weighted by temperature.
+- All temperate climate penalty multipliers are set to 1, which means that all parameters will be nominal.
+- On the other hand, since the temperate mean is also the universal reference temperature, any deviation towards the 
+positive (hot) or negative (cold) will incur a slight penalty.
+- These temperature deviations around climate averages are controlled by standard deviations, to prevent a temperature 
+from reaching a climate value that is not its own.
 
+![Temperature](/assets/md_images/temperature.png)
 
 - **❄. Impact of cold climate :**
   - **Survivors**
@@ -143,6 +179,10 @@ The simulation alternates between several climates, each with a different impact
 - **🍃. Impact of temperate climate :**
   - All simulation parameters are nominal
 
+
+- The malus applied to Survivors are weighted by their resilience and energy values but also the climatic temperature.
+
+![Weighting](/assets/md_images/weighting.png)
 
 - Each time the climate changes, the background color changes by fading.
 

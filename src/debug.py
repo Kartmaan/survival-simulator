@@ -51,8 +51,8 @@ class DebugOnScreen:
         self.font_size = 20
         self.font_color = colors["BLACK"]
         self.font_size_max = self.font_size
-        self.offset = 20
-        self.size_height_ratio = 1.2
+        self.offset = 25
+        self.size_height_ratio = 0.2
         self.font = pygame.font.SysFont(self.font_name, self.font_size)
         self.debug_timers = {}
 

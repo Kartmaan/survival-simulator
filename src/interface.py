@@ -9,13 +9,14 @@ WIDTH, HEIGHT = screen.get_size()
 
 def show_winners_stats(surface: pygame.Surface, start_pos: Vector2, winner: Survivor):
     """
-    Displaying the winner's statistics.
+    Displaying the winner's statistics on the floating window.
     """
     line_spacing = 50
     font_size = 35
 
     stats = {
         "Audacity" : round(winner.audacity, 2),
+        "Resilience" : round(winner.resilience, 2),
         "Nb of hits" : winner.nb_of_hits
     }
 
@@ -103,3 +104,12 @@ def show_winner_window(winner: Survivor):
     # -------------------------------------------------------------------
     screen.blit(shadow_surface, (shadow_x, shadow_y)) # Draws shadow on main screen
     screen.blit(floating_win, (win_x, win_y)) # Draws the floating window on main screen
+
+# <WORK IN PROGRESS>
+# TODO: Basic HUD on screen
+def show_hud():
+    """
+    Displays a basic HUD on screen
+    """
+    pass
+# </WORK IN PROGRESS>
