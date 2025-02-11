@@ -1,4 +1,4 @@
-# Survivor simulator
+# Survival simulator
 
 Simulation of survivors on the move in search of food, avoiding dangers and trying, as best they can, to resist harsh climates thanks to their specific characteristics.
 
