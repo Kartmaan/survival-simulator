@@ -34,7 +34,7 @@ def show_winners_stats(surface: pygame.Surface, start_pos: Vector2, winner: Surv
 def show_winner_window(winner: Survivor):
     """
     Floating window appears when only one Survivor is left alive, highlighting the winner and displaying information
-    about him or her.
+    about it.
     """
 
     # -------------------------------------------------------------------
