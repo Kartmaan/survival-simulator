@@ -64,10 +64,11 @@ hud.watcher = watcher
 # ===================================================================
 # The Danger is placed first, as its position will determine that of
 # Food. We make sure it's far enough from the edges of the surface so
-# that its attack animations are visible.
-
+# that its attack animations are visible. We also make sure that the
+# Danger is far enough away from the right side of the window, which
+# contains the HUD.
 danger_zero = Danger(0, 0)  # Danger model (not displayed)
-danger = Danger(np.random.randint(danger_zero.edge*3, WIDTH - danger_zero.edge*3),
+danger = Danger(np.random.randint(danger_zero.edge*3, WIDTH - danger_zero.edge*10),
                 np.random.randint(danger_zero.edge*3, HEIGHT - danger_zero.edge*3))
 
 # ===================================================================

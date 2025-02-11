@@ -18,6 +18,20 @@ def get_distance(p1: Vector2, p2: Vector2) -> float:
   distance = p1.distance_to(p2)
   return distance
 
+def get_center(p1: Vector2, p2: Vector2) -> Vector2:
+    """
+    Returns the midpoint between two coordinates.
+
+    Args:
+        p1 (Vector2): First coordinates.
+        p2 (Vector2): Second coordinates.
+
+    Returns:
+        Vector2 : Midpoint coordinates.
+    """
+    center = (p1 + p2) / 2
+    return center
+
 def current_time() -> float:
     """Returns the number of seconds since Pygame was
     initialized.

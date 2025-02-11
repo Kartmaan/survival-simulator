@@ -101,7 +101,7 @@ class Survivor:
         self.survivor_radius_showcase = self.survivor_radius_default * 5
 
         # Sensory radius
-        self.sensory_radius_default = self.survivor_radius * 20
+        self.sensory_radius_default = self.survivor_radius * 15
         self.sensory_radius = self.survivor_radius_default
 
         # -------------------------------------------------------------------

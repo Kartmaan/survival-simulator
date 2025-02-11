@@ -5,6 +5,7 @@ import pygame
 from pygame.math import Vector2
 
 from src.pygame_options import screen
+from src.utils import get_distance, get_center
 from src.style import colors, print_on_screen
 from src.survivor import Survivor
 from src.world import Watcher, Climate
@@ -111,7 +112,10 @@ def show_winner_window(winner: Survivor):
 
 class Hud:
     """
+    Class representing the simulation interface.
 
+    This class is responsible for displaying visual information on the screen, such as weather conditions and survivor
+    statistics.
     """
     def __init__(self):
         # -------------------------------------------------------------------
@@ -119,13 +123,15 @@ class Hud:
         # -------------------------------------------------------------------
         self.screen_width = screen.width
         self.screen_height = screen.height
-
+        # ===================================================================
+        #                             CLIMATE
+        # ===================================================================
         # -------------------------------------------------------------------
         #                          CLIMATE SLOT
         # -------------------------------------------------------------------
         self.climate_slot_path: str = os.path.join("assets", 'hud', "climate_slot.png")
         self.climate_slot_image: pygame.Surface = pygame.image.load(self.climate_slot_path)
-        self.climate_slot_image.set_alpha(150)
+        self.climate_slot_image.set_alpha(150) # Opacity
 
         self.climate_slot_pos: Vector2 = Vector2(0, 0)
         self.climate_slot_screen_ratio = 0.07
@@ -147,10 +153,34 @@ class Hud:
         self.hot_climate_path: str = os.path.join("assets", 'hud', "hot.png")
         self.hot_climate_image: pygame.Surface = pygame.image.load(self.hot_climate_path)
 
+        # Climate images size
         self.climate_image_pos: Vector2 = Vector2(0, 0)
         self.climate_image_slot_ratio = 0.9
-        self.climate_image_size = 1
+        self.climate_image_size: Optional[float] = None
         self.current_climate_image: pygame.Surface = self.temperate_climate_image
+        # -------------------------------------------------------------------
+        #                        ENERGY MEAN GAUGE
+        # -------------------------------------------------------------------
+        # Colors
+        self.frame_color = colors["GAUGE_FRAME"]
+        self.start_color = colors["GAUGE_START"]
+        self.end_color = colors["GAUGE_END"]
+        self.gauge_alpha: int = 150 # Opacity
+
+        # Position
+        self.gauge_pos: Optional[Vector2] = None
+
+        # Sizes
+        self.gauge_height_ratio: float = 0.7
+        self.gauge_height: float = self.screen_height * self.gauge_height_ratio
+        self.gauge_width_ratio: float = 0.4
+        self.gauge_width: Optional[float] = self.climate_slot_edge * self.gauge_width_ratio
+        self.frame_thickness = 3
+
+        # Values
+        self.current_value: Optional[float] = None
+        self.max_value: Optional[float] = None
+
         # -------------------------------------------------------------------
         #                              TEXT
         # -------------------------------------------------------------------
@@ -163,12 +193,94 @@ class Hud:
         # -------------------------------------------------------------------
         self.current_climate: Climate = Climate.TEMPERATE
         self.watcher: Optional[Watcher] = None
+        self.survivor_zero: Survivor = Survivor(0, 0)
 
         # -------------------------------------------------------------------
         #                       SCALING & POSITIONING
         # -------------------------------------------------------------------
+        # Scaling and positioning of all elements except the gauge.
         self.scaling()
         self.positioning()
+
+        # The gauge is scaled and positioned after the other HUD elements, since it uses the position of the climate
+        # slot after its scaling and positioning.
+        self.gauge_scaling()
+        self.gauge_positioning()
+
+    def interpolate_gauge_color(self, ratio:float) -> tuple[int, int, int, int]:
+        """
+        Interpole between two colors based on ratio.
+        ratio = 1 → start color.
+        ratio = 0 → end color.
+
+        The gauge is colored 'self.start_color' when the measured value is at its maximum, and changes to
+        'self.end_color' by gradient as the value decreases.
+
+        Returns:
+            tuple: Adjusted color + alpha value
+        """
+        r = int(self.start_color[0] * ratio + self.end_color[0] * (1 - ratio))
+        g = int(self.start_color[1] * ratio + self.end_color[1] * (1 - ratio))
+        b = int(self.start_color[2] * ratio + self.end_color[2] * (1 - ratio))
+
+        return r, g, b, self.gauge_alpha
+
+    def gauge_scaling(self):
+        """
+        Scales gauge.
+
+        - Gauge width is a fraction of the width of 'climate_slot' (which has already been scaled and positioned).
+        - Gauge height is a fraction of the distance from the temperature text position to the bottom of the window.
+        """
+        # y distance between temperature txt and screen bottom
+        temp_to_bottom_dist = get_distance(self.txt_temperature_pos, Vector2(self.txt_temperature_pos.x, screen.height))
+        self.gauge_height = temp_to_bottom_dist * self.gauge_height_ratio
+        self.gauge_width = self.climate_slot_edge * self.gauge_width_ratio
+
+    def gauge_positioning(self):
+        """
+        Gauge positioning.
+
+        The center of the gauge is positioned at the midpoint between the temperature text and the bottom of the screen.
+        """
+        # Midpoint between temperature text and bottom screen
+        middle = get_center(self.txt_temperature_pos, Vector2(self.txt_temperature_pos.x, screen.height))
+
+        x = middle.x - self.gauge_width // 2
+        y = middle.y - self.gauge_height // 2
+        self.gauge_pos = Vector2(x, y)
+
+    def draw_gauge(self, value: float, max_value: int):
+        """
+        Draws gauge on screen.
+
+        Args:
+            value (float): Value to be displayed on the gauge
+            max_value (float): Maximum value of the 'value' argument. Used to adjust gauge progression.
+        """
+        # Size and position recovery
+        x = self.gauge_pos.x
+        y = self.gauge_pos.y
+        width = self.gauge_width
+        height = self.gauge_height
+
+        # Creating the surface on which the gauge will be drawn
+        fill_surface = pygame.Surface((width, height), pygame.SRCALPHA)
+
+        # Gauge height adjustment based on current value and max. value
+        fill_height = int((value / max_value) * (height - self.frame_thickness * 2))
+
+        # Gauge color adjusts to current value, proportional to max. value
+        fill_color = self.interpolate_gauge_color(value / max_value)
+
+        # Drawing of gauge at height adjusted to current value
+        pygame.draw.rect(fill_surface, fill_color, (0, height - fill_height, width, fill_height))
+
+        # Gauge display
+        screen.blit(fill_surface, (x, y))
+
+        # Drawing gauge frame displayed over it
+        pygame.draw.rect(screen, self.frame_color, (x, y, width, height), self.frame_thickness)
 
     def scaling(self):
         """
@@ -218,7 +330,7 @@ class Hud:
         self.climate_image_pos = Vector2(climate_x, climate_y)
 
         # -------------------------------------------------------------------
-        #                       TEXT POSITIONING
+        #                        TEXT POSITIONING
         # -------------------------------------------------------------------
         # TEMPERATURE TEXT
         # The temperature display is positioned under the climate slot.
@@ -275,7 +387,29 @@ class Hud:
         print_on_screen(screen, self.txt_survivors_alive_pos, txt=txt, font_size=20, bold=True)
 
         # -------------------------------------------------------------------
-        #                         SHOW EVERYTHING
+        #                         SHOW CLIMATE SLOT
         # -------------------------------------------------------------------
         screen.blit(self.climate_slot_image, self.climate_slot_pos)
         screen.blit(self.current_climate_image, self.climate_image_pos)
+
+        # -------------------------------------------------------------------
+        #                            SHOW GAUGE
+        # -------------------------------------------------------------------
+        # Gauge title txt
+        offset_from_gauge_top = 40
+        title_pos_x = (self.gauge_pos.x + self.gauge_width // 2)
+        title_pos_y = (self.gauge_pos.y + self.gauge_width // 2) - offset_from_gauge_top
+        title_pos = Vector2(title_pos_x, title_pos_y)
+
+        print_on_screen(screen, title_pos, txt="Energy mean", font_size=18)
+
+        # Gauge value txt
+        offset_from_gauge_bottom = 25
+        value_pos_x = title_pos_x
+        value_pos_y = (self.gauge_pos.y + self.gauge_height) + offset_from_gauge_bottom
+        value_pos = Vector2(value_pos_x, value_pos_y)
+
+        print_on_screen(screen, value_pos, txt=f"{round(self.watcher.energy_mean, 2)}", font_size=18)
+
+        # Show gauge
+        self.draw_gauge(self.watcher.energy_mean, self.survivor_zero.energy_default)

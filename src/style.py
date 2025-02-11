@@ -58,12 +58,15 @@ colors = {
     "DANGER" : [255, 51, 51, 255], # ALPHA
 
     # -------------------------------------------------------------------
-    #                        INTERFACE COLORS
+    #                        INTERFACE / HUD COLORS
     # -------------------------------------------------------------------
     # Colors in the final simulation interface.
 
     "INTERFACE" : [176,224,230],
-    "SHOWCASE" : [240,255,240]
+    "SHOWCASE" : [240,255,240],
+    "GAUGE_FRAME" : [40, 40, 40],
+    "GAUGE_START" : [0, 255, 0],
+    "GAUGE_END" : [15, 15, 15]
 }
 
 def print_on_screen(screen: pygame.Surface, pos: Vector2 = Vector2(0, 0), ref_pos: str = "center", bold: bool = False,
