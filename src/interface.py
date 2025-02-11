@@ -1,9 +1,13 @@
+import os
+from typing import Optional
+
 import pygame
 from pygame.math import Vector2
 
 from src.pygame_options import screen
 from src.style import colors, print_on_screen
 from src.survivor import Survivor
+from src.world import Watcher, Climate
 
 WIDTH, HEIGHT = screen.get_size()
 
@@ -105,11 +109,173 @@ def show_winner_window(winner: Survivor):
     screen.blit(shadow_surface, (shadow_x, shadow_y)) # Draws shadow on main screen
     screen.blit(floating_win, (win_x, win_y)) # Draws the floating window on main screen
 
-# <WORK IN PROGRESS>
-# TODO: Basic HUD on screen
-def show_hud():
+class Hud:
     """
-    Displays a basic HUD on screen
+
     """
-    pass
-# </WORK IN PROGRESS>
+    def __init__(self):
+        # -------------------------------------------------------------------
+        #                           SCREEN SIZE
+        # -------------------------------------------------------------------
+        self.screen_width = screen.width
+        self.screen_height = screen.height
+
+        # -------------------------------------------------------------------
+        #                          CLIMATE SLOT
+        # -------------------------------------------------------------------
+        self.climate_slot_path: str = os.path.join("assets", 'hud', "climate_slot.png")
+        self.climate_slot_image: pygame.Surface = pygame.image.load(self.climate_slot_path)
+        self.climate_slot_image.set_alpha(150)
+
+        self.climate_slot_pos: Vector2 = Vector2(0, 0)
+        self.climate_slot_screen_ratio = 0.07
+        self.climate_slot_offset = 10
+        self.climate_slot_edge = self.climate_slot_image.get_size()[0]
+
+        # -------------------------------------------------------------------
+        #                         CLIMATE IMAGES
+        # -------------------------------------------------------------------
+        # Temperate image
+        self.temperate_climate_path: str = os.path.join("assets", 'hud', "temperate.png")
+        self.temperate_climate_image: pygame.Surface = pygame.image.load(self.temperate_climate_path)
+
+        # Cold image
+        self.cold_climate_path: str = os.path.join("assets", 'hud', "cold.png")
+        self.cold_climate_image: pygame.Surface = pygame.image.load(self.cold_climate_path)
+
+        # Hot image
+        self.hot_climate_path: str = os.path.join("assets", 'hud', "hot.png")
+        self.hot_climate_image: pygame.Surface = pygame.image.load(self.hot_climate_path)
+
+        self.climate_image_pos: Vector2 = Vector2(0, 0)
+        self.climate_image_slot_ratio = 0.9
+        self.climate_image_size = 1
+        self.current_climate_image: pygame.Surface = self.temperate_climate_image
+        # -------------------------------------------------------------------
+        #                              TEXT
+        # -------------------------------------------------------------------
+        # HUD texts
+        self.txt_temperature_pos: Optional[Vector2] = None
+        self.txt_survivors_alive_pos: Optional[Vector2] = None
+
+        # -------------------------------------------------------------------
+        #                             STATES
+        # -------------------------------------------------------------------
+        self.current_climate: Climate = Climate.TEMPERATE
+        self.watcher: Optional[Watcher] = None
+
+        # -------------------------------------------------------------------
+        #                       SCALING & POSITIONING
+        # -------------------------------------------------------------------
+        self.scaling()
+        self.positioning()
+
+    def scaling(self):
+        """
+        Resizes HUD elements according to window size.
+        """
+        # Climate slot scaling
+        self.climate_slot_edge = self.screen_width * self.climate_slot_screen_ratio
+        self.climate_slot_image = pygame.transform.scale(self.climate_slot_image, (self.climate_slot_edge,
+                                                                                   self.climate_slot_edge))
+
+        # Climate images scaling value (only one side value since the images are square).
+        self.climate_image_size = self.climate_slot_edge * self.climate_image_slot_ratio
+
+        # Temperate image scaling
+        self.temperate_climate_image = pygame.transform.scale(self.temperate_climate_image,
+                                                              (self.climate_image_size,
+                                                               self.climate_image_size))
+        # Cold image scaling
+        self.cold_climate_image = pygame.transform.scale(self.cold_climate_image,(self.climate_image_size,
+                                                          self.climate_image_size))
+        # Hot image scaling
+        self.hot_climate_image = pygame.transform.scale(self.hot_climate_image, (self.climate_image_size,
+                                                                                 self.climate_image_size))
+
+    def positioning(self):
+        """
+        Positions HUD elements according to window size.
+        """
+        # -------------------------------------------------------------------
+        #                     CLIMATE SLOT POSITIONING
+        # -------------------------------------------------------------------
+        # Placing the climate slot.
+        slot_offset = self.climate_slot_offset
+        self.climate_slot_pos = Vector2((self.screen_width - self.climate_slot_edge) - slot_offset, slot_offset)
+
+        # -------------------------------------------------------------------
+        #                    CLIMATE IMAGE POSITIONING
+        # -------------------------------------------------------------------
+        # Get slot center.
+        slot_center_x = self.climate_slot_pos.x + (self.climate_slot_edge // 2)
+        slot_center_y = self.climate_slot_pos.y + (self.climate_slot_edge // 2)
+
+        # Places the image in the center of the slot.
+        climate_x = slot_center_x - (self.temperate_climate_image.get_width() // 2)
+        climate_y = slot_center_y - (self.temperate_climate_image.get_height() // 2)
+
+        self.climate_image_pos = Vector2(climate_x, climate_y)
+
+        # -------------------------------------------------------------------
+        #                       TEXT POSITIONING
+        # -------------------------------------------------------------------
+        # TEMPERATURE TEXT
+        # The temperature display is positioned under the climate slot.
+        offset_from_slot = 20
+        x = (self.climate_slot_pos.x + (self.climate_slot_edge / 2))
+        y = (self.climate_slot_pos.y + self.climate_slot_edge + offset_from_slot)
+        self.txt_temperature_pos = Vector2(x, y)
+
+        # SURVIVORS ALIVE TEXT
+        x = self.screen_width // 2
+        y = 15  # Offset from top of screen
+        self.txt_survivors_alive_pos = Vector2(x, y)
+
+    def show(self, current_climate: Climate, temperature: float):
+        """
+        Display of all HUD elements.
+
+        Args:
+            current_climate (Climate): Current simulation climate
+            temperature (float): Current simulation temperature
+        """
+        # -------------------------------------------------------------------
+        #                        SET CLIMATE IMAGES
+        # -------------------------------------------------------------------
+        # Changes the HUD climate image to match the current simulation climate.
+
+        self.current_climate = current_climate # Get the current climate
+
+        # Temperate climate
+        if self.current_climate == Climate.TEMPERATE:
+            self.current_climate_image = self.temperate_climate_image
+
+        # Cold climate
+        elif self.current_climate == Climate.COLD:
+            self.current_climate_image = self.cold_climate_image
+
+        # Hot climate
+        else:
+            self.current_climate_image = self.hot_climate_image
+
+        # -------------------------------------------------------------------
+        #                            SHOW TEXT
+        # -------------------------------------------------------------------
+        # TEMPERATURE
+        # Display of current simulation temperature under the HUD climate slot.
+        print_on_screen(screen, self.txt_temperature_pos, font_size=20, txt=f"{int(temperature)}°C", bold=True)
+
+        # SURVIVORS ALIVE
+        # Displays the number of Survivors alive out of the total number of Survivors.
+        total_survivors = self.watcher.init_population
+        survivors_alive = self.watcher.living_survivors
+        txt = f"Survivors alive : {survivors_alive}/{total_survivors}"
+
+        print_on_screen(screen, self.txt_survivors_alive_pos, txt=txt, font_size=20, bold=True)
+
+        # -------------------------------------------------------------------
+        #                         SHOW EVERYTHING
+        # -------------------------------------------------------------------
+        screen.blit(self.climate_slot_image, self.climate_slot_pos)
+        screen.blit(self.current_climate_image, self.climate_image_pos)

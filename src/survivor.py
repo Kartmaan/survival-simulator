@@ -95,7 +95,7 @@ class Survivor:
         #                             SIZES
         # -------------------------------------------------------------------
         # Survivor radius
-        self.survivor_radius_default = 3
+        self.survivor_radius_default = 4.5
         self.survivor_radius = self.survivor_radius_default
         self.survivor_radius_eating = self.survivor_radius + 3 # Oscillation
         self.survivor_radius_showcase = self.survivor_radius_default * 5

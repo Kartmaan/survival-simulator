@@ -66,7 +66,7 @@ colors = {
     "SHOWCASE" : [240,255,240]
 }
 
-def print_on_screen(screen: pygame.Surface, pos: Vector2 = Vector2(0, 0), ref_pos: str = "center",
+def print_on_screen(screen: pygame.Surface, pos: Vector2 = Vector2(0, 0), ref_pos: str = "center", bold: bool = False,
                     font_name: str = "Arial", font_size: int = 20, txt: str = "", color: tuple|list = (0,0,0)):
     """
     Displays text directly on screen.
@@ -74,13 +74,18 @@ def print_on_screen(screen: pygame.Surface, pos: Vector2 = Vector2(0, 0), ref_po
     Args:
         screen (pygame.Screen) : Surface where to print
         pos (Vector2) : Text coordinates. Default : Vector2(0, 0).
-        ref_pos (str) : Coordinate referential ('center', 'topleft', 'topright'). Default : "center"
+        ref_pos (str) : Coordinate referential ('center', 'topleft', 'topright'). Default : "center".
+        bold (bool) : Bold text.
         font_name (str) : Font name. Default : "Arial".
         font_size (int) : Font size. Default : 20.
         txt (str) : Text to display. Default : "".
         color (tuple|list) : Text color RGB. Default : (0,0,0).
     """
-    font = pygame.font.SysFont(font_name, font_size)
+    if bold:
+        font = pygame.font.SysFont(font_name, font_size, bold=True)
+    else:
+        font = pygame.font.SysFont(font_name, font_size)
+
     txt_surface = font.render(txt, antialias=True, color=color)
     txt_rect = txt_surface.get_rect()
 
@@ -95,7 +100,7 @@ def print_on_screen(screen: pygame.Surface, pos: Vector2 = Vector2(0, 0), ref_po
 
     screen.blit(txt_surface, txt_rect)
 
-def draw_cross(screen: pygame.Surface, pos: Vector2, branch_length: int, width: int = 1, color: tuple = (0,0,0)):
+def draw_cross(screen: pygame.Surface, pos: Vector2, branch_length: float, width: int = 1, color: tuple = (0,0,0)):
     """
     Draws a cross on the screen at the specified coordinates.
 
@@ -112,7 +117,7 @@ def draw_cross(screen: pygame.Surface, pos: Vector2, branch_length: int, width: 
     pygame.draw.line(screen, color, first_branch[0], first_branch[1], width)
     pygame.draw.line(screen, color, second_branch[0], second_branch[1], width)
 
-def draw_square(screen: pygame.Surface, pos: Vector2, edge: int, color: tuple = (0,0,0)):
+def draw_square(screen: pygame.Surface, pos: Vector2, edge: float, color: tuple = (0,0,0)):
     """
     Draws a square centered on the given position.
 

@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Optional
 
 import numpy as np
 import pygame.time
@@ -17,7 +18,7 @@ class Watcher:
     centralized access point for global information, avoiding the need for global variables.
     """
     def __init__(self):
-        self.debug_on_screen: DebugOnScreen
+        self.debug_on_screen: Optional[DebugOnScreen] = None
         self.population: list[Survivor] = []
         self.init_population = 0
 

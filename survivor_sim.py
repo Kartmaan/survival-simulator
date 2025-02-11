@@ -12,34 +12,52 @@ from src.survivor import Survivor
 from src.danger import Danger
 from src.food import Food
 from src.world import Watcher, Weather, Climate
-from src.interface import show_winner_window
+from src.interface import show_winner_window, Hud
 
 # ===================================================================
 #                          INITIALIZATION
 # ===================================================================
-watcher = Watcher()
-weather = Weather()
-debug_on_screen = DebugOnScreen()
-logger = logging.getLogger("src.debug")
+# -------------------------------------------------------------------
+#                       NUMBER OF SURVIVORS
+# -------------------------------------------------------------------
+# Number of Survivors to generate
+NB_OF_SURVIVORS = 120
 
-# Displaying information useful for debugging
+# -------------------------------------------------------------------
+#                        DISPLAY SETTINGS
+# -------------------------------------------------------------------
+# Displaying information on screen
+ENABLE_HUD = True
 ON_SCREEN_DEBUG = False
 SHOW_DANGER_DISTANCE_LINE = False
 SHOW_FOOD_DISTANCE_LINE = False
 
-# Number of Survivors to generate
-NB_OF_SURVIVORS = 250
+# -------------------------------------------------------------------
+#                       OBJECT INSTANTIATION
+# -------------------------------------------------------------------
+# Debug objects
+debug_on_screen = DebugOnScreen()
+logger = logging.getLogger("src.debug")
 
+# Simulation objects
+watcher = Watcher()
+weather = Weather()
+
+# HUD
+hud = Hud()
+
+# -------------------------------------------------------------------
+#                         OBJECT SETTING
+# -------------------------------------------------------------------
+# Watcher
 watcher.set_init_population(NB_OF_SURVIVORS)
 watcher.set_debug(debug_on_screen)
 
+# Weather
 weather.debug_on_screen = debug_on_screen
 
-survivor_zero = Survivor(0, 0)  # Survivor model (not displayed)
-survivors: list[Survivor] = []  # Contains all generated Survivor
-
-logger.info(f"Number of survivors : {NB_OF_SURVIVORS}")
-logger.info(f"Energy max : {survivor_zero.energy_default}")
+# Hud
+hud.watcher = watcher
 
 # ===================================================================
 #                          DANGER CREATION
@@ -89,6 +107,12 @@ food = Food(x, y)
 # We make sure that the coordinates generated for each Survivor are far
 # enough away from Danger and from the edges. The distance to Food is not
 # verified, as Survivors are not immediately hungry.
+
+survivors: list[Survivor] = []  # Contains all generated Survivor
+survivor_zero = Survivor(0, 0)  # Survivor model (not displayed)
+
+logger.info(f"Number of survivors : {NB_OF_SURVIVORS}")
+logger.info(f"Energy max : {survivor_zero.energy_default}")
 
 for _ in range(NB_OF_SURVIVORS):
     survivor_sensorial_radius = survivor_zero.sensory_radius
@@ -639,6 +663,9 @@ while running:
     if not watcher.we_have_a_winner:
         danger.show()
         food.show()
+
+        if ENABLE_HUD:
+            hud.show(weather.current_climate, weather.temperature)
 
     # The winner has been designated and retrieved by the Watcher class, and the contents of the Survivor list can
     # be deleted.
