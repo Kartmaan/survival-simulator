@@ -3,7 +3,7 @@
 Simulation of survivors on the move in search of food, avoiding dangers and trying, as best they can, to resist harsh climates thanks to their specific characteristics.
 
 
-https://github.com/user-attachments/assets/1207574a-ad1f-495d-85cc-277536574ba0
+https://github.com/user-attachments/assets/689de7b2-a5a9-402a-a27c-f3f276ebda94
 
 
 ## Entities
