@@ -1,0 +1,2 @@
+pygame-ce # Coded with Community Edition 2.5.3, but 'pygame' should also work.
+numpy # Tested version: 2.2.2

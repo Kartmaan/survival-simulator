@@ -6,7 +6,7 @@ import numpy as np
 
 from src.pygame_options import screen, WIDTH, HEIGHT
 from src.utils import current_time, get_distance
-from src.style import colors, draw_cross, draw_square, print_on_screen
+from src.style import draw_cross, draw_square, print_on_screen, colors
 from src.food import Food
 
 logger = logging.getLogger("src.debug")
@@ -18,14 +18,15 @@ names_list = [] # List of all Survivor names to avoid duplication.
 
 class Survivor:
     """
-    Entity moving in search of food.
+    Entity moving in search of food while trying to resist danger.
 
     - The Survivor has a limited amount of energy
     - It moves randomly across the surface, which causes it to lose energy.
     - It has a sensory field that enables it to detect food, danger and other Survivors.
     - When he detects danger, he flees, increasing his speed and losing more energy.
     - When he encounters a Danger, the Survivor establishes a safe distance from it and keeps it for a time.
-    - It has an 'audacity' value that determines the length of this safety distance.
+    - It has an 'audacity' value that determines the length of this safety distance and also its flee duration.
+    - it has a 'resilience' value that determines its ability to withstand the penalties of its environment.
     - When it detects another Survivor fleeing, it follows it out of survival instinct.
     - When it detects food and the need arises, it consumes it to increase its energy.
     - A Survivor with a critical energy threshold consumes food more quickly.
@@ -64,7 +65,7 @@ class Survivor:
         # -------------------------------------------------------------------
         self.speed_default = 4
         self.speed = self.speed_default
-        self.speed_penalty = 1
+        self.speed_penalty = 1 # Climate penalty
         self.speed_critical = self.speed / 4
         self.speed_food_rush = self.speed + 1
         self.speed_flee = self.speed + 2
@@ -155,8 +156,9 @@ class Survivor:
         # -------------------------------------------------------------------
         #                          ENERGY MANAGEMENT
         # -------------------------------------------------------------------
-        # The Survivor loses more or less energy as he moves, depending on whether he's in danger or not. Conversely,
-        # he gains more or less energy when eating, depending on whether he has a critical energy level or not.
+        # The Survivor loses more or less energy as he moves, depending on whether
+        # he's in danger or not. Conversely, he gains more or less energy when eating,
+        # depending on whether he has a critical energy level or not.
 
         # Energy values
         self.energy_default = 120 # Initial and maximum energy
@@ -207,6 +209,8 @@ class Survivor:
     def _set_resilience(self) -> float:
         """
         Sets a random resilience value to Survivor.
+
+        This value determines the Survivor's ability to withstand the penalties of its environment.
 
         Returns:
             float: Resilience value
@@ -270,14 +274,6 @@ class Survivor:
         duration = ((self.audacity_max - self.audacity) / (self.audacity_max - self.audacity_min) *
                     (self.flee_duration_max - self.flee_duration_min) + self.flee_duration_min)
         return duration
-
-    # def _get_weighted_penalty(self) -> float:
-    #     """
-    #     Weights a penalty coefficient with the energy value.
-    #     """
-    #     speed_penalty = self.speed_penalty
-    #     energy_max = self.energy_default
-    #     temperature = 0
 
     def _give_me_a_name(self):
         """
@@ -468,14 +464,13 @@ class Survivor:
         self.survivor_timers["eating_cooldown"] = current_time()
 
     @staticmethod
-    def name_generator(syllables_min=2, syllables_max=4, suffix=False) -> str:
+    def name_generator(syllables_min=2, syllables_max=4) -> str:
         """
         Generates a name for Survivors by combining syllables.
 
         Args:
             syllables_min (int): Minimum number of syllables.
             syllables_max (int): Maximum number of syllables.
-            suffix (bool, optional): Suffixes is added occasionally. Defaults to False.
 
         Returns:
             str: The generated name.
@@ -502,8 +497,6 @@ class Survivor:
                            "ard", "erd", "ird", "ord", "urd", "ald", "eld", "ild", "old", "uld",
                            "and", "end", "ind", "ond", "und", "ast", "est", "ist", "ost", "ust"]
 
-        suffixes = ["The Beast", "The Survivor", "The Last", ]
-
         # Choice of a random number of syllables
         nb_of_syllables = np.random.randint(syllables_min, syllables_max)
 
@@ -520,10 +513,6 @@ class Survivor:
                 name_parts.append(np.random.choice(middle_syllables))  # final syllable
 
         final_name.append("".join(name_parts).capitalize())
-
-        # Add a suffix (optional)
-        if suffix and np.random.random() < 0.2:  # proba 20%
-            final_name.append(np.random.choice(suffixes))
 
         # Assembling the parts
         name = " ".join(final_name)
@@ -692,7 +681,7 @@ class Survivor:
                 # There's still food to eat.
                 if self.food_object.quantity > 0:
                     self.food_object.quantity -= self.food_object.energy_bonus
-                    self.food_object.adjust_edge()
+                    self.food_object.adjust_size()
                 # No more food to eat.
                 else:
                     self.appetite_suppressant_pill()
@@ -872,5 +861,7 @@ class Survivor:
     def __lt__(self, other) -> bool:
         """
         This special method is used so that the 'sorted' method can be used on a list of Survivor objects.
+
+        This special method is used by the 'podium' method of the 'Watcher' class ('world' module).
         """
         return self.energy > other.energy

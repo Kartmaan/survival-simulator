@@ -184,7 +184,7 @@ class Watcher:
 
     def set_debug(self, debug_obj: DebugOnScreen):
         """
-
+        Provides the DebugOnScreen object to the class, so that it can display its collected information.
         """
         self.debug_on_screen = debug_obj
 
@@ -271,7 +271,7 @@ class Weather:
         # -------------------------------------------------------------------
         #                           OTHER OBJECTS
         # -------------------------------------------------------------------
-        self.debug_on_screen: DebugOnScreen
+        self.debug_on_screen: Optional[DebugOnScreen] = None
 
     def timer(self, timer_name: str, duration: float) -> bool:
         """Checks if a timer has expired.

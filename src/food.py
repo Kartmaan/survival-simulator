@@ -155,7 +155,7 @@ class Food:
 
         logger.info(f"Food respawn at {self.pos}. Quantity : {self.quantity}")
 
-    def rat_and_respawn(self, survivors:list):
+    def spoil_and_respawn(self, survivors:list):
         """
         Degrades food at regular intervals and respawns it at new coordinates when its quantity reaches zero.
 
@@ -166,8 +166,8 @@ class Food:
         # Food spoils at regular intervals, whether it's eaten or not.
         if self.timer("decay", self.decay_frequency):
             if self.quantity > 0:
-                self.quantity -= self.decay_amount * self.decay_amount_penalty
-                self.adjust_edge()
+                self.quantity -= self.decay_amount * self.decay_amount_penalty # Climatic penalty
+                self.adjust_size()
 
         # The food was completely consumed
         if self.quantity <= 0:
@@ -181,7 +181,7 @@ class Food:
                     eating_survivor.appetite_suppressant_pill()
 
             # Cooldown launched for Food respawn
-            cooldown = self.time_to_respawn * self.time_to_respawn_penalty
+            cooldown = self.time_to_respawn * self.time_to_respawn_penalty # Climatic penalty
             if self.timer("cooldown", cooldown):
                 self.find_a_new_place()
                 self.in_cooldown = False
@@ -202,7 +202,7 @@ class Food:
         random_quantity = np.random.randint(self.quantity_min, self.quantity_max) * self.quantity_penalty
         return random_quantity
 
-    def adjust_edge(self):
+    def adjust_size(self):
         """
         Reduces 'self.edge' and 'self.scent_field_radius' according to 'self.quantity value'.
 

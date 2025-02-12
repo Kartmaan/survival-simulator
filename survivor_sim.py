@@ -12,7 +12,7 @@ from src.survivor import Survivor
 from src.danger import Danger
 from src.food import Food
 from src.world import Watcher, Weather, Climate
-from src.interface import show_winner_window, Hud
+from src.interface import Hud, show_winner_window
 
 # ===================================================================
 #                          INITIALIZATION
@@ -146,11 +146,10 @@ for _ in range(NB_OF_SURVIVORS):
 # ===================================================================
 #                          FUNCTIONS
 # ===================================================================
-# Useful functions for detecting certain events.
-
 # -------------------------------------------------------------------
 #                       EVENTS DETECTION
 # -------------------------------------------------------------------
+# Useful functions for detecting certain events.
 
 def danger_detection():
     """
@@ -200,11 +199,8 @@ def danger_detection():
 def deja_vu_detection():
     """
     When a Survivor is attacked by a Danger, it flees, keeping in mind a security distance around it so as not to cross
-    it again for a set time.
-    This time is marked by the activation of the Survivor's 'self.deja_vu' status.
-    This
-    function checks whether a Survivor in 'deja_vu' mode reaches or exceeds this security distance.
-    If so, the Survivor
+    it again for a set time. This time is marked by the activation of the Survivor's 'self.deja_vu' status. This
+    function checks whether a Survivor in 'deja_vu' mode reaches or exceeds this security distance. If so, the Survivor
     turns back.
     """
     for SURVIVOR in survivors:
@@ -303,9 +299,6 @@ def food_detection():
                     logger.info(f"Rush regulation : Eaters: {eaters}/{food.max_eaters}, In rush : {in_rush}")
 
                 survivors_in_rush: list[Survivor] = [] # All Survivors in rush mode
-                #survivors_not_able_to_rush: list[Survivor] = [] # Survivors who won't be able to rush
-                #nb_of_survivors_able_to_rush = 0
-                #nb_of_survivors_not_able_to_rush = 0
 
                 # Identifying Survivors in rush.
                 for rushing_survivor in survivors:
@@ -500,6 +493,8 @@ while running:
             food.decay_amount_penalty = weather.cold_food_decay # Food spoils more slowly
             food.time_to_respawn_penalty = weather.cold_food_respawn # Food respawns later
 
+            # We collect some information about the first survivor on the list to monitor the behavior of its dynamic
+            # variables to climate change.
             if len(survivors) > 0:
                 debug_on_screen.add("S1 speed", round(survivors[0].speed, 4))
                 debug_on_screen.add("S1 ELP", round(survivors[0].energy_loss_penalty, 4))
@@ -570,6 +565,7 @@ while running:
                 debug_on_screen.add("S1 ELP", round(survivors[0].energy_loss_penalty, 4))
                 debug_on_screen.add("S1 Constitution", round(survivors[0].resilience, 2))
 
+    # Debug display of current climate status.
     debug_on_screen.add("Current climate", weather.current_climate.name)
     debug_on_screen.add("Temperature", round(weather.temperature, 2))
 
@@ -580,6 +576,7 @@ while running:
 
     danger_detection()
 
+    # Debug display of current Danger status
     debug_on_screen.add("Danger rotation speed", f"{danger.rotation_speed}/{danger.rotation_speed_max}")
     debug_on_screen.add("Danger rage", danger.rage)
 
@@ -593,10 +590,11 @@ while running:
     # -------------------------------------------------------------------
     #                        FOOD DETECTION
     # -------------------------------------------------------------------
-    # Checks if Survivor has detected Food and if the Food has been consumed
+    # Checks if Survivor has detected the food, degrades the food at regular
+    # intervals and respawns it elsewhere if its quantity drops to zero.
 
     food_detection()
-    food.rat_and_respawn(survivors)
+    food.spoil_and_respawn(survivors)
 
     # -------------------------------------------------------------------
     #                        DEJA VU DETECTION
@@ -636,7 +634,7 @@ while running:
     # -------------------------------------------------------------------
     #                      THE SLAUGHTERHOUSE
     # -------------------------------------------------------------------
-    # Survivors running out of energy are removed
+    # Survivors running out of energy are removed.
 
     slaughterhouse(to_remove)
 

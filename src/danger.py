@@ -17,7 +17,6 @@ class Danger:
     - It has a rage level that determines the amount of damage it inflicts.
     - It attacks Survivors who get too close to it.
     - When attacking, the Danger moves rapidly back and forth in the direction of the targeted Survivor.
-    - Todo: Each successful attack (probability) drains part of the Survivor's energy.
     - Each attack increases its rage level to a maximum threshold.
     - The Danger rotates on itself, its speed proportional to its rage level.
     - When the Danger spends a certain amount of time without attacking, its rage level decreases.
@@ -96,12 +95,14 @@ class Danger:
 
         return False
 
-    # TODO: Cooldown for attack
     def attack(self, target_pos: Vector2):
         """
         Triggering the attack animation against a Survivor.
 
         This animation consists of a rapid back-and-forth movement towards the targeted Survivor.
+
+        Todo: Each successful attack (probability) drains part of the Survivor's energy.
+        Todo: Cooldown for attack
 
         Args:
             target_pos (Vector2): Targeted Survivor position.
@@ -157,7 +158,7 @@ class Danger:
         determined by the attribute self.rage_decreasing_cooldown.
         """
         if "rage_cooldown" in self.danger_timers:
-            cooldown = self.rage_decreasing_cooldown * self.rage_decreasing_cooldown_penalty
+            cooldown = self.rage_decreasing_cooldown * self.rage_decreasing_cooldown_penalty # Climatic penalty
             if self.timer("rage_cooldown", cooldown):
                 if self.rotation_speed > 0:
                     self.rotation_speed -= 1
@@ -167,7 +168,7 @@ class Danger:
         """
         Displays Danger on the screen.
         """
-        #
+        # Checks whether the rage level should be reduced.
         self.rage_cooldown()
 
         x = self.pos.x
@@ -186,7 +187,6 @@ class Danger:
         self.angle += self.rotation_speed
 
         screen.blit(rotated_surface, rotated_rect)
-        # pygame.draw.rect(screen, tuple(self.color), danger_rect)
 
     def get_pos(self) -> Vector2:
         """
